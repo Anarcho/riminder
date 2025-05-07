@@ -242,7 +242,7 @@ namespace Riminder
             }
         }
 
-        private void RefreshTendReminders()
+        public void RefreshTendReminders()
         {
             foreach (var reminder in reminders)
             {

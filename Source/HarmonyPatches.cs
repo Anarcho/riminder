@@ -513,12 +513,20 @@ namespace Riminder
                         var tendComp = hediffWithComps.TryGetComp<HediffComp_TendDuration>();
                         if (tendComp != null)
                         {
-                            // Only update existing reminders, don't create new ones
+                            // Create the two possible ID formats that might be used by the reminder
+                            string loadIdStr = hediff.loadID.ToString();
+                            string alternateId = $"{pawn.ThingID}_{hediff.def.defName}";
+                            
+                            // Find all possible matching reminders to update
                             var existingReminders = RiminderManager.GetActiveReminders()
                                 .OfType<PawnTendReminder>()
                                 .Where(r => r.pawnId == pawn.ThingID && 
-                                           (r.hediffId.Contains(hediff.def.defName) || 
-                                            r.hediffLabel == hediff.def.label))
+                                       (r.hediffId == loadIdStr || 
+                                        r.hediffId == alternateId ||
+                                        r.hediffId.Contains(hediff.def.defName) || 
+                                        r.hediffLabel == hediff.def.label ||
+                                        hediff.def.defName.Contains(r.hediffLabel) ||
+                                        hediff.def.label == r.hediffLabel))
                                 .ToList();
 
                             foreach (var reminder in existingReminders)
@@ -526,12 +534,29 @@ namespace Riminder
                                 // The reminder will update itself in its Trigger method
                                 reminder.Trigger();
                             }
+                            
+                            if (existingReminders.Count > 0)
+                            {
+                                // Also trigger a refresh of the view dialog if it's open
+                                var openDialogs = Find.WindowStack?.Windows?.OfType<Dialog_ViewReminders>();
+                                if (openDialogs != null && openDialogs.Any())
+                                {
+                                    foreach (var dialog in openDialogs)
+                                    {
+                                        dialog.RefreshTendReminders();
+                                    }
+                                }
+                            }
                         }
                     }
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
-                    // Silently fail
+                    // Log errors in development mode
+                    if (Prefs.DevMode)
+                    {
+                        Log.Error($"[Riminder] Error in Notify_HediffChanged: {ex}");
+                    }
                 }
             }
         }

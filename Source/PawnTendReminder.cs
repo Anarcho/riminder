@@ -207,33 +207,64 @@ namespace Riminder
             // Try to find by loadID first
             if (long.TryParse(hediffId, out long loadID) && loadID != 0)
             {
-                return pawn.health.hediffSet.hediffs
+                Hediff byLoadId = pawn.health.hediffSet.hediffs
                     .FirstOrDefault(h => h.loadID == loadID);
+                    
+                if (byLoadId != null) return byLoadId;
             }
             
             // Otherwise try to find by our custom identifier
             string[] parts = hediffId.Split('_');
-            if (parts.Length != 2) 
+            if (parts.Length == 2) 
             {
-                Log.Warning($"[Riminder] Invalid hediff ID format: {hediffId}");
-                return null;
+                string pawnID = parts[0];
+                string defName = parts[1];
+                
+                // Find exact matching hediff by defName
+                var matchingHediffs = pawn.health.hediffSet.hediffs
+                    .Where(h => h.def.defName == defName)
+                    .ToList();
+
+                if (matchingHediffs.Count > 0)
+                {
+                    return matchingHediffs.FirstOrDefault();
+                }
             }
             
-            string pawnID = parts[0];
-            string defName = parts[1];
-            
-            // Find matching hediff
-            var matchingHediffs = pawn.health.hediffSet.hediffs
-                .Where(h => h.def.defName == defName)
-                .ToList();
-
-            if (matchingHediffs.Count == 0)
+            // If previous methods failed, try matching by label
+            if (!string.IsNullOrEmpty(hediffLabel))
             {
-                return null;
+                // Match by exact label
+                var byExactLabel = pawn.health.hediffSet.hediffs
+                    .FirstOrDefault(h => h.def.label == hediffLabel);
+                
+                if (byExactLabel != null) return byExactLabel;
+                
+                // Match by case-insensitive label
+                var byCaseInsensitiveLabel = pawn.health.hediffSet.hediffs
+                    .FirstOrDefault(h => h.def.label.Equals(hediffLabel, StringComparison.OrdinalIgnoreCase));
+                
+                if (byCaseInsensitiveLabel != null) return byCaseInsensitiveLabel;
+                
+                // Match by contained label (either way)
+                var byPartialLabel = pawn.health.hediffSet.hediffs
+                    .FirstOrDefault(h => h.def.label.Contains(hediffLabel, StringComparison.OrdinalIgnoreCase) ||
+                                        hediffLabel.Contains(h.def.label, StringComparison.OrdinalIgnoreCase));
+                
+                if (byPartialLabel != null) return byPartialLabel;
+            }
+            
+            // Last resort: return first hediff with matching defName if it's in the ID somehow
+            foreach (var hediff in pawn.health.hediffSet.hediffs)
+            {
+                if (hediffId.Contains(hediff.def.defName) || 
+                    hediff.def.defName.Contains(hediffLabel))
+                {
+                    return hediff;
+                }
             }
 
-            // Return the first matching hediff
-            return matchingHediffs.FirstOrDefault();
+            return null;
         }
         
         // Generate a description of the tend reminder
