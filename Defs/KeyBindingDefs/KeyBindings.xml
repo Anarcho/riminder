@@ -5,6 +5,5 @@
     <label>Open Riminder dialog</label>
     <category>Riminder</category>
     <defaultKeyCodeA>R</defaultKeyCodeA>
-    <modifiers>Alt</modifiers>
   </KeyBindingDef>
 </Defs> 

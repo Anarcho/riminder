@@ -11,7 +11,8 @@ namespace Riminder
         Weekly,
         Monthly,
         Quarterly,
-        Yearly
+        Yearly,
+        WhenTendingRequired
     }
 
     public class Reminder : IExposable
@@ -40,7 +41,7 @@ namespace Riminder
             this.dismissed = false;
         }
 
-        public void ExposeData()
+        public virtual void ExposeData()
         {
             Scribe_Values.Look(ref id, "id");
             Scribe_Values.Look(ref label, "label");
@@ -52,7 +53,7 @@ namespace Riminder
             Scribe_Values.Look(ref dismissed, "dismissed", false);
         }
 
-        public void Trigger()
+        public virtual void Trigger()
         {
             if (dismissed) return;
             
@@ -106,7 +107,7 @@ namespace Riminder
             }
         }
 
-        public float GetProgressPercent()
+        public virtual float GetProgressPercent()
         {
             int currentTick = Find.TickManager.TicksGame;
             if (currentTick >= triggerTick) return 1f;
@@ -170,6 +171,34 @@ namespace Riminder
             }
             
             return result.ToString();
+        }
+
+        public virtual void OpenEditDialog()
+        {
+            Find.WindowStack.Add(new Dialog_EditReminder(this));
+        }
+
+        public string GetFrequencyDisplayString()
+        {
+            switch (frequency)
+            {
+                case ReminderFrequency.OneTime:
+                    return "One Time";
+                case ReminderFrequency.Daily:
+                    return "Daily";
+                case ReminderFrequency.Weekly:
+                    return "Weekly";
+                case ReminderFrequency.Monthly:
+                    return "Monthly";
+                case ReminderFrequency.Quarterly:
+                    return "Quarterly";
+                case ReminderFrequency.Yearly:
+                    return "Yearly";
+                case ReminderFrequency.WhenTendingRequired:
+                    return "Tending";
+                default:
+                    return frequency.ToString();
+            }
         }
     }
 } 

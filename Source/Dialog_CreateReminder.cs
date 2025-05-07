@@ -22,11 +22,12 @@ namespace Riminder
         
         public Dialog_CreateReminder()
         {
-            forcePause = true;
+            forcePause = false;
             doCloseX = true;
             doCloseButton = false;
             closeOnClickedOutside = true;
-            absorbInputAroundWindow = true;
+            absorbInputAroundWindow = false;
+            preventCameraMotion = false;
         }
 
         public override Vector2 InitialSize => new Vector2(450f, 750f);

@@ -24,17 +24,17 @@ namespace Riminder
         
         public Dialog_EditReminder(Reminder reminder)
         {
-            forcePause = true;
+            this.originalReminder = reminder;
+            this.label = reminder.label;
+            this.description = reminder.description;
+            this.selectedFrequency = reminder.frequency;
+            
+            forcePause = false;
             doCloseX = true;
-            doCloseButton = false; 
+            doCloseButton = false;
             closeOnClickedOutside = true;
-            absorbInputAroundWindow = true;
-            
-            originalReminder = reminder;
-            
-            label = reminder.label;
-            description = reminder.description;
-            selectedFrequency = reminder.frequency;
+            absorbInputAroundWindow = false; // Allow key events to pass through
+            preventCameraMotion = false; // Allow camera movement
             
             int ticksRemaining = reminder.triggerTick - Find.TickManager.TicksGame;
             if (ticksRemaining > 0)

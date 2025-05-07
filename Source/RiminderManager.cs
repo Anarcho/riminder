@@ -75,6 +75,23 @@ namespace Riminder
                 return;
             }
             
+            // Check for duplicates before adding
+            if (reminder is PawnTendReminder tendReminder)
+            {
+                // For tend reminders, check if we already have one for this pawn + condition
+                bool isDuplicate = instance.reminders.Any(r => 
+                    r is PawnTendReminder tr &&
+                    !r.completed && !r.dismissed &&
+                    tr.pawnId == tendReminder.pawnId && 
+                    tr.hediffLabel == tendReminder.hediffLabel);
+                
+                if (isDuplicate)
+                {
+                    // Skip adding this duplicate remind
+                    return;
+                }
+            }
+            
             instance.reminders.Add(reminder);
         }
 
@@ -85,6 +102,17 @@ namespace Riminder
             // Filter out completed and dismissed reminders
             return instance.reminders
                 .Where(r => !r.completed && !r.dismissed)
+                .ToList();
+        }
+        
+        public static List<PawnTendReminder> GetActiveTendReminders()
+        {
+            if (instance == null) return new List<PawnTendReminder>();
+            
+            // Return only PawnTendReminder instances that are active
+            return instance.reminders
+                .Where(r => r is PawnTendReminder && !r.completed && !r.dismissed)
+                .Cast<PawnTendReminder>()
                 .ToList();
         }
 

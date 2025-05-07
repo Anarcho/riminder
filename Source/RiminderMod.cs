@@ -17,6 +17,9 @@ namespace Riminder
             // Initialize the reminder manager
             RiminderManager.Initialize();
             
+            // Initialize the auto tend reminder manager
+            AutoTendReminderManager.Initialize();
+            
             // No need to manually register hotkeys - they're handled by the KeyPrefs system
             // and our harmony patch
         }
