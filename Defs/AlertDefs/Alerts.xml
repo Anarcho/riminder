@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Defs>
+  <AlertDef>
+    <defName>Reminder</defName>
+    <label>reminder</label>
+    <description>A reminder has triggered.</description>
+    <hyperlinks>
+      <li>Riminder</li>
+    </hyperlinks>
+    <durationType>Normal</durationType>
+    <criticalThreshold>10</criticalThreshold>
+    <priority>High</priority>
+    <alertClass>Riminder.Alert_Reminder</alertClass>
+  </AlertDef>
+</Defs> 
