@@ -27,41 +27,6 @@ namespace Riminder
             Log.Message("[Riminder] Harmony patches applied");
         }
 
-        public class KeyPressHandler : MonoBehaviour
-        {
-            private void Update()
-            {
-                if (Current.Game == null) return;
-
-                if (RiminderHotKeyDefOf.OpenRiminderDialog != null &&
-                    RiminderHotKeyDefOf.OpenRiminderDialog.KeyDownEvent &&
-                    Find.WindowStack != null)
-                {
-                    Log.Message("[Riminder] Hotkey detected, opening dialog");
-                    Find.WindowStack.Add(new Dialog_ViewReminders());
-                }
-            }
-        }
-
-        [HarmonyPatch(typeof(UIRoot_Play), "UIRootOnGUI")]
-        public static class UIRoot_Play_UIRootOnGUI_Patch
-        {
-            private static bool initialized = false;
-
-            [HarmonyPostfix]
-            public static void Postfix()
-            {
-                if (!initialized && Current.Game != null)
-                {
-                    var gameObject = new GameObject("RiminderKeyHandler");
-                    gameObject.AddComponent<KeyPressHandler>();
-                    UnityEngine.Object.DontDestroyOnLoad(gameObject);
-                    initialized = true;
-                    Log.Message("[Riminder] Key handler initialized");
-                }
-            }
-        }
-
         [HarmonyPatch(typeof(FloatMenuMakerMap), "AddHumanlikeOrders")]
         public static class FloatMenuMakerMap_AddHumanlikeOrders_Patch
         {
