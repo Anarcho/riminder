@@ -209,7 +209,7 @@ namespace Riminder
                 triggerTick += hours * GenDate.TicksPerHour;
             }
 
-            int minOffset = GenDate.TicksPerHour; // Minimum 1 hour
+            int minOffset = GenDate.TicksPerHour; 
             if (triggerTick - Find.TickManager.TicksGame < minOffset)
             {
                 triggerTick = Find.TickManager.TicksGame + minOffset;

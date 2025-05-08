@@ -44,7 +44,6 @@ namespace Riminder
                 Widgets.Label(new Rect(LeftMargin, currentY, contentWidth, ControlHeight), $"Tending reminder for {pawn.LabelShort}");
                 currentY += ControlHeight + 10f;
 
-                // Show current health conditions for the pawn
                 string healthInfo = "Current health conditions:";
                 
                 bool foundAnyTendableCondition = false;
@@ -94,7 +93,6 @@ namespace Riminder
                 
                 currentY += infoHeight + 20f;
                 
-                // Note about how reminders work now
                 string noteText = "Note: This reminder will automatically be removed when no conditions need tending.";
                 Rect noteRect = new Rect(LeftMargin, currentY, contentWidth, ControlHeight);
                 GUI.color = Color.yellow;

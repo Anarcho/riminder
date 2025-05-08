@@ -51,7 +51,6 @@ namespace Riminder
                 hediffId = nextTendableHediff.loadID > 0 ? nextTendableHediff.loadID.ToString() : $"{pawn.ThingID}_{nextTendableHediff?.def.defName}";
                 hediffLabel = nextTendableHediff?.def?.label ?? "Unknown";
                 
-                // Simplified label - just "Tend {pawn} {hediff}" without extra information
                 this.label = $"Tend {pawnLabel}'s {hediffLabel}";
             }
             else
@@ -178,7 +177,6 @@ namespace Riminder
                 bool allHealed = true;
                 bool allImmune = true;
 
-                // Create a list to track hediffs with full immunity
                 List<Hediff> immuneHediffs = new List<Hediff>();
 
                 foreach (var hediff in pawn.health.hediffSet.hediffs)
@@ -192,11 +190,9 @@ namespace Riminder
 
                         allHealed = false;
 
-                        // Check for immunity
                         var immunityComp = hwc.TryGetComp<HediffComp_Immunizable>();
                         if (immunityComp != null)
                         {
-                            // If the hediff has reached immunity, add it to the list
                             if (immunityComp.Immunity >= 1f)
                             {
                                 if (removeOnImmunity)
@@ -207,17 +203,14 @@ namespace Riminder
                             }
                             else
                             {
-                                // At least one hediff is not immune
                                 allImmune = false;
                             }
                         }
                         else
                         {
-                            // Hediffs without immunity component aren't immune
                             allImmune = false;
                         }
 
-                        // Check if tending is needed
                         if (!tendComp.IsTended)
                         {
                             anyNeedTending = true;
@@ -225,15 +218,16 @@ namespace Riminder
                     }
                 }
 
-                // If all hediffs are healed or all are immune, reset and wait for next check
                 if (allHealed || (allImmune && removeOnImmunity))
                 {
                     description = GetTendDescription(pawn);
                     triggerTick = CalculateNextTendTick(pawn);
+                    alerted = false; 
                     return;
                 }
 
-                // If we need to tend and haven't alerted yet, send an alert
+                int nextTendTick = CalculateNextTendTick(pawn);
+
                 if (anyNeedTending && !alerted)
                 {
                     Find.LetterStack.ReceiveLetter(
@@ -248,22 +242,36 @@ namespace Riminder
                     }
 
                     alerted = true;
-                    triggerTick = Find.TickManager.TicksGame + GenDate.TicksPerHour;
-                    return;
-                }
-
-                // If we've already alerted, keep checking every hour
-                if (alerted)
-                {
-                    description = GetTendDescription(pawn);
-                    triggerTick = Find.TickManager.TicksGame + GenDate.TicksPerHour;
+                    triggerTick = Find.TickManager.TicksGame + GenDate.TicksPerHour; 
                     return;
                 }
 
                 description = GetTendDescription(pawn);
-                triggerTick = CalculateNextTendTick(pawn);
+                
+                if (alerted)
+                {
+                    if (nextTendTick > Find.TickManager.TicksGame + (GenDate.TicksPerHour * 2))
+                    {
+                        alerted = false;
+                        triggerTick = nextTendTick;
+                    }
+                    else
+                    {
+                        triggerTick = Math.Min(nextTendTick, Find.TickManager.TicksGame + GenDate.TicksPerHour);
+                    }
+                }
+                else
+                {
+                    triggerTick = nextTendTick;
+                }
             }
-            catch (Exception) { }
+            catch (Exception ex) 
+            {
+                if (Prefs.DevMode)
+                {
+                    Log.Error($"[Riminder] Error in PawnTendReminder.Trigger: {ex}");
+                }
+            }
         }
 
         public Pawn FindPawn()
@@ -445,7 +453,6 @@ namespace Riminder
             Pawn pawn = FindPawn();
             if (pawn == null) return 1f;
 
-            // Check if any hediff needs tending now
             foreach (var hediff in pawn.health.hediffSet.hediffs)
             {
                 if (!hediff.def.tendable || hediff.IsPermanent()) continue;
@@ -455,7 +462,6 @@ namespace Riminder
                     var tendComp = hwc.TryGetComp<HediffComp_TendDuration>();
                     if (tendComp != null)
                     {
-                        // If tending is needed now, progress should be 100%
                         if (!tendComp.IsTended || tendComp.tendTicksLeft <= 0)
                         {
                             return 1f;
@@ -464,7 +470,6 @@ namespace Riminder
                 }
             }
 
-            // For hediffs that don't need immediate tending
             float totalProgress = 0f;
             int tendableCount = 0;
             float maxProgress = 0f;
@@ -480,7 +485,6 @@ namespace Riminder
                     {
                         if (tendComp.IsTended)
                         {
-                            // Store maximum tend duration for new hediffs
                             if (tendComp.tendTicksLeft > 0 && lastMaxTendTicks <= 0f)
                             {
                                 lastMaxTendTicks = GenDate.TicksPerDay;
@@ -488,11 +492,9 @@ namespace Riminder
 
                             if (lastMaxTendTicks > 0f)
                             {
-                                // Calculate progress based on remaining ticks compared to maximum duration
                                 float remainingDuration = tendComp.tendTicksLeft;
                                 float tendProgress = 1f - (remainingDuration / lastMaxTendTicks);
                                 
-                                // Clamp progress between 0 and 1
                                 tendProgress = Math.Max(0f, Math.Min(1f, tendProgress));
                                 
                                 totalProgress += tendProgress;
@@ -511,7 +513,7 @@ namespace Riminder
                     }
                 }
 
-                if (hediff is Hediff_Injury injury)
+                if (hediff is Hediff_Injury injury && !injury.IsPermanent())
                 {
                     float progress = 1f - injury.Severity / injury.def.initialSeverity;
                     totalProgress += progress;
@@ -520,7 +522,6 @@ namespace Riminder
                 }
             }
 
-            // Use the highest progress among all hediffs to better represent urgency
             return tendableCount > 0 ? maxProgress : 1f;
         }
 

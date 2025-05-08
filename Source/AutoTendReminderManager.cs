@@ -27,13 +27,10 @@ namespace Riminder
 
         public override void GameComponentTick()
         {
-            // Only check every 60 ticks (about 1 second)
             if (Find.TickManager.TicksGame % 60 != 0) return;
 
-            // Check if auto-create is enabled
             if (!RiminderMod.Settings.autoCreateTendReminders) return;
 
-            // Check all pawns
             foreach (Pawn pawn in PawnsFinder.AllMapsCaravansAndTravelingTransportPods_Alive_Colonists)
             {
                 if (pawn.health == null || pawn.health.hediffSet == null) continue;
@@ -42,17 +39,13 @@ namespace Riminder
                 {
                     if (hediff == null) continue;
 
-                    // Skip if we've already processed this hediff
                     string hediffId = GetHediffIdentifier(pawn, hediff);
                     if (processedHediffs.Contains(hediffId)) continue;
 
-                    // Check if this hediff needs tending
                     if (NeedsTending(hediff))
                     {
-                        // Check if we already have a reminder for this
                         if (!HasExistingReminder(pawn, hediff))
                         {
-                            // Create a new reminder
                             CreateTendReminder(pawn, hediff);
                         }
                         processedHediffs.Add(hediffId);
@@ -63,13 +56,10 @@ namespace Riminder
 
         private bool NeedsTending(Hediff hediff)
         {
-            // Skip permanent hediffs like scars
             if (hediff.IsPermanent()) return false;
 
-            // Skip removed hediffs
             if (hediff.def.defName.Contains("Removed") || hediff.Label.Contains("removed")) return false;
 
-            // Check if the hediff needs tending
             if (hediff is HediffWithComps hediffWithComps)
             {
                 foreach (HediffComp comp in hediffWithComps.comps)

@@ -118,6 +118,15 @@ namespace Riminder
 
             int daysLeft = ticksLeft / GenDate.TicksPerDay;
             int hoursLeft = (ticksLeft % GenDate.TicksPerDay) / GenDate.TicksPerHour;
+            
+            if (ticksLeft % GenDate.TicksPerHour > 0)
+                hoursLeft++;
+                
+            if (hoursLeft == 24)
+            {
+                hoursLeft = 0;
+                daysLeft++;
+            }
 
             int years = daysLeft / daysPerYear;
             int remainingDaysAfterYears = daysLeft % daysPerYear;
@@ -140,14 +149,14 @@ namespace Riminder
                 hasAdded = true;
             }
 
-            if (remainingDays > 0 || (!hasAdded && hoursLeft == 0))
+            if (remainingDays > 0)
             {
                 if (hasAdded) result.Append(", ");
                 result.Append(remainingDays == 1 ? "1 day" : $"{remainingDays} days");
                 hasAdded = true;
             }
 
-            if (hoursLeft > 0 && daysLeft == 0)
+            if (hoursLeft > 0 || (!hasAdded && daysLeft == 0))
             {
                 if (hasAdded) result.Append(", ");
                 result.Append(hoursLeft == 1 ? "1 hour" : $"{hoursLeft} hours");
