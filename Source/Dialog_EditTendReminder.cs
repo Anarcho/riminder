@@ -8,7 +8,6 @@ namespace Riminder
     public class Dialog_EditTendReminder : Window
     {
         private readonly PawnTendReminder reminder;
-        private bool removeOnImmunity;
 
         private const float LeftMargin = 20f;
         private const float ControlHeight = 30f;
@@ -16,7 +15,6 @@ namespace Riminder
         public Dialog_EditTendReminder(PawnTendReminder reminder)
         {
             this.reminder = reminder ?? throw new ArgumentNullException(nameof(reminder));
-            this.removeOnImmunity = reminder.removeOnImmunity;
 
             forcePause = false;
             doCloseX = true;
@@ -41,31 +39,74 @@ namespace Riminder
             Pawn pawn = reminder.FindPawn();
             Hediff hediff = reminder.FindHediff(pawn);
 
-            if (pawn != null && hediff != null)
+            if (pawn != null)
             {
-                Widgets.Label(new Rect(LeftMargin, currentY, contentWidth, ControlHeight), $"Tending reminder for {pawn.LabelShort}'s {hediff.Label}");
+                Widgets.Label(new Rect(LeftMargin, currentY, contentWidth, ControlHeight), $"Tending reminder for {pawn.LabelShort}");
                 currentY += ControlHeight + 10f;
 
-                if (hediff is HediffWithComps hwc)
+                // Show current health conditions for the pawn
+                string healthInfo = "Current health conditions:";
+                
+                bool foundAnyTendableCondition = false;
+                
+                foreach (var h in pawn.health.hediffSet.hediffs)
                 {
-                    var tendComp = hwc.TryGetComp<HediffComp_TendDuration>();
-                    if (tendComp != null)
+                    if (!h.def.tendable || h.IsPermanent()) continue;
+                    
+                    if (h is HediffWithComps hwc)
                     {
-                        Widgets.Label(new Rect(LeftMargin, currentY, contentWidth, ControlHeight), $"Current tend quality: {tendComp.tendQuality:P0}");
-                        currentY += ControlHeight + 10f;
-
-                        float hoursLeft = tendComp.tendTicksLeft / (float)GenDate.TicksPerHour;
-                        Widgets.Label(new Rect(LeftMargin, currentY, contentWidth, ControlHeight), $"Time until next tending needed: {hoursLeft:F1} hours");
-                        currentY += ControlHeight + 10f;
+                        var tendComp = hwc.TryGetComp<HediffComp_TendDuration>();
+                        if (tendComp != null)
+                        {
+                            healthInfo += $"\n- {h.Label}";
+                            
+                            if (tendComp.IsTended)
+                            {
+                                healthInfo += $" (Quality: {tendComp.tendQuality:P0})";
+                                float hoursLeft = tendComp.tendTicksLeft / (float)GenDate.TicksPerHour;
+                                if (hoursLeft > 0)
+                                {
+                                    healthInfo += $" - Next tend in: {hoursLeft:F1}h";
+                                }
+                                else
+                                {
+                                    healthInfo += " - Ready to tend";
+                                }
+                            }
+                            else
+                            {
+                                healthInfo += " - Needs tending now!";
+                            }
+                            
+                            foundAnyTendableCondition = true;
+                        }
                     }
                 }
-
-                if (hediff is HediffWithComps diseaseHediff && diseaseHediff.TryGetComp<HediffComp_Immunizable>() != null)
+                
+                if (!foundAnyTendableCondition)
                 {
-                    Rect checkboxRect = new Rect(LeftMargin, currentY, contentWidth, ControlHeight);
-                    Widgets.CheckboxLabeled(checkboxRect, "Remove reminder when immunity is reached", ref removeOnImmunity);
-                    currentY += ControlHeight + 10f;
+                    healthInfo += "\nNo conditions currently require tending.";
                 }
+                
+                float infoHeight = Text.CalcHeight(healthInfo, contentWidth);
+                Rect infoRect = new Rect(LeftMargin, currentY, contentWidth, infoHeight);
+                Widgets.Label(infoRect, healthInfo);
+                
+                currentY += infoHeight + 20f;
+                
+                // Note about how reminders work now
+                string noteText = "Note: This reminder will automatically be removed when no conditions need tending.";
+                Rect noteRect = new Rect(LeftMargin, currentY, contentWidth, ControlHeight);
+                GUI.color = Color.yellow;
+                Widgets.Label(noteRect, noteText);
+                GUI.color = Color.white;
+                
+                currentY += ControlHeight + 10f;
+            }
+            else
+            {
+                Widgets.Label(new Rect(LeftMargin, currentY, contentWidth, ControlHeight), "Error: Pawn not found");
+                currentY += ControlHeight + 10f;
             }
 
             float buttonY = inRect.height - ControlHeight - 10f;
@@ -79,7 +120,6 @@ namespace Riminder
 
             if (Widgets.ButtonText(new Rect(inRect.width / 2 + 5f, buttonY, buttonWidth, ControlHeight), "Save"))
             {
-                reminder.removeOnImmunity = removeOnImmunity;
                 Messages.Message("Tend reminder updated", MessageTypeDefOf.TaskCompletion, false);
                 Close();
                 Find.WindowStack.Add(new Dialog_ViewReminders());

@@ -20,165 +20,325 @@ namespace Riminder
 
         public static void Initialize()
         {
-            if (instance == null && Current.Game != null)
+            try
             {
-                instance = Current.Game.GetComponent<RiminderManager>();
-                if (instance == null)
+                if (instance == null && Current.Game != null)
                 {
-                    instance = new RiminderManager(Current.Game);
-                    Current.Game.components.Add(instance);
+                    instance = Current.Game.GetComponent<RiminderManager>();
+                    if (instance == null)
+                    {
+                        instance = new RiminderManager(Current.Game);
+                        Current.Game.components.Add(instance);
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"[Riminder] Failed to initialize RiminderManager: {ex}");
             }
         }
 
         public override void GameComponentTick()
         {
-            base.GameComponentTick();
-
-            if (Find.TickManager.TicksGame % 60 != 0) return;
-
-            int currentTick = Find.TickManager.TicksGame;
-
-            for (int i = reminders.Count - 1; i >= 0; i--)
+            try
             {
-                Reminder reminder = reminders[i];
+                base.GameComponentTick();
 
-                if (reminder.completed || reminder.dismissed)
+                if (reminders == null)
                 {
-                    reminders.RemoveAt(i);
-                    continue;
+                    reminders = new List<Reminder>();
+                    return;
                 }
 
-                if (currentTick >= reminder.triggerTick)
-                {
-                    reminder.Trigger();
+                int currentTick = Find.TickManager.TicksGame;
 
-                    if (reminder.completed)
+                bool shouldRefreshDescriptions = currentTick % 60 == 0;
+
+                for (int i = reminders.Count - 1; i >= 0; i--)
+                {
+                    try
                     {
-                        reminders.RemoveAt(i);
+                        if (i >= reminders.Count || reminders[i] == null)
+                        {
+                            continue;
+                        }
+
+                        Reminder reminder = reminders[i];
+
+                        if (reminder.completed || reminder.dismissed)
+                        {
+                            reminders.RemoveAt(i);
+                            continue;
+                        }
+
+                        if (shouldRefreshDescriptions && reminder is PawnTendReminder tendReminder)
+                        {
+                            Pawn pawn = tendReminder.FindPawn();
+                            if (pawn != null)
+                            {
+                                tendReminder.UpdateLabelAndDescription(pawn);
+                            }
+                        }
+
+                        if (currentTick >= reminder.triggerTick)
+                        {
+                            reminder.Trigger();
+
+                            if (reminder.completed)
+                            {
+                                reminders.RemoveAt(i);
+                            }
+                        }
                     }
+                    catch (Exception ex)
+                    {
+                        if (Prefs.DevMode)
+                        {
+                            Log.Error($"[Riminder] Error processing reminder at index {i}: {ex}");
+                        }
+                        
+                        if (i < reminders.Count)
+                        {
+                            reminders.RemoveAt(i);
+                        }
+                    }
+                }
+
+                if (shouldRefreshDescriptions)
+                {
+                    try
+                    {
+                        var openDialogs = Find.WindowStack?.Windows?.OfType<Dialog_ViewReminders>().ToList();
+                        if (openDialogs != null && openDialogs.Any())
+                        {
+                            foreach (var dialog in openDialogs)
+                            {
+                                if (dialog != null)
+                                {
+                                    dialog.RefreshAndRedraw();
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception) { }
+                }
+            }
+            catch (Exception ex)
+            {
+                if (Prefs.DevMode)
+                {
+                    Log.Error($"[Riminder] Error in GameComponentTick: {ex}");
                 }
             }
         }
 
         public static void AddReminder(Reminder reminder)
         {
-            if (instance == null)
+            try
             {
-                Log.Error("Cannot add reminder - RiminderManager not initialized");
-                return;
-            }
-
-            if (reminder is PawnTendReminder tendReminder)
-            {
-                // Find any existing tend reminders for this pawn
-                var existingReminders = instance.reminders
-                    .Where(r => !r.completed && !r.dismissed)
-                    .OfType<PawnTendReminder>()
-                    .Where(r => r.pawnId == tendReminder.pawnId)
-                    .ToList();
-
-                // If we already have a reminder for this specific condition, update it
-                var exactMatch = existingReminders.FirstOrDefault(r => 
-                    r.hediffId == tendReminder.hediffId || 
-                    r.hediffLabel == tendReminder.hediffLabel);
-
-                if (exactMatch != null)
+                if (instance == null)
                 {
-                    exactMatch.label = tendReminder.label;
-                    exactMatch.description = tendReminder.description;
-                    exactMatch.triggerTick = tendReminder.triggerTick;
-                    exactMatch.removeOnImmunity = tendReminder.removeOnImmunity;
+                    Log.Error("[Riminder] Cannot add reminder - RiminderManager not initialized");
                     return;
                 }
 
-                // If we find a similar reminder (same pawn, similar condition name), update it
-                var similarMatch = existingReminders.FirstOrDefault(r =>
-                    r.hediffId.Contains(tendReminder.hediffId) ||
-                    tendReminder.hediffId.Contains(r.hediffId) ||
-                    r.hediffLabel.Contains(tendReminder.hediffLabel) ||
-                    tendReminder.hediffLabel.Contains(r.hediffLabel));
-
-                if (similarMatch != null)
+                if (instance.reminders == null)
                 {
-                    similarMatch.label = tendReminder.label;
-                    similarMatch.description = tendReminder.description;
-                    similarMatch.triggerTick = tendReminder.triggerTick;
-                    similarMatch.removeOnImmunity = tendReminder.removeOnImmunity;
+                    instance.reminders = new List<Reminder>();
+                }
+
+                if (reminder == null)
+                {
+                    Log.Error("[Riminder] Attempted to add null reminder");
                     return;
                 }
-            }
 
-            instance.reminders.Add(reminder);
-
-            // Refresh any open reminder dialogs
-            var openDialogs = Find.WindowStack?.Windows?.OfType<Dialog_ViewReminders>();
-            if (openDialogs != null && openDialogs.Any())
-            {
-                foreach (var dialog in openDialogs)
+                if (reminder is PawnTendReminder tendReminder)
                 {
-                    dialog.RefreshAndRedraw();
+                    try
+                    {
+                        var existingReminders = instance.reminders
+                            .Where(r => r != null && !r.completed && !r.dismissed)
+                            .OfType<PawnTendReminder>()
+                            .Where(r => r.pawnId == tendReminder.pawnId)
+                            .ToList();
+
+                        if (existingReminders.Any())
+                        {
+                            var existingReminder = existingReminders.First();
+                            existingReminder.label = tendReminder.label;
+                            existingReminder.description = tendReminder.description;
+                            existingReminder.triggerTick = tendReminder.triggerTick;
+                            existingReminder.removeOnImmunity = tendReminder.removeOnImmunity;
+                            existingReminder.hediffId = tendReminder.hediffId;
+                            existingReminder.hediffLabel = tendReminder.hediffLabel;
+                            
+                            try
+                            {
+                                var existingDialogs = Find.WindowStack?.Windows?.OfType<Dialog_ViewReminders>().ToList();
+                                if (existingDialogs != null && existingDialogs.Any())
+                                {
+                                    foreach (var dialog in existingDialogs)
+                                    {
+                                        if (dialog != null)
+                                        {
+                                            dialog.RefreshAndRedraw();
+                                        }
+                                    }
+                                }
+                            }
+                            catch (Exception) { }
+                            
+                            return;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error($"[Riminder] Error checking existing tend reminders: {ex}");
+                    }
                 }
+
+                instance.reminders.Add(reminder);
+
+                try
+                {
+                    var openDialogs = Find.WindowStack?.Windows?.OfType<Dialog_ViewReminders>().ToList();
+                    if (openDialogs != null && openDialogs.Any())
+                    {
+                        foreach (var dialog in openDialogs)
+                        {
+                            if (dialog != null)
+                            {
+                                dialog.RefreshAndRedraw();
+                            }
+                        }
+                    }
+                }
+                catch (Exception) { }
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"[Riminder] Error adding reminder: {ex}");
             }
         }
 
         public static List<Reminder> GetActiveReminders()
         {
-            if (instance == null) return new List<Reminder>();
+            if (Current.Game == null || Find.CurrentMap == null)
+            {
+                return new List<Reminder>();
+            }
+            
+            try
+            {
+                if (instance == null) return new List<Reminder>();
+                if (instance.reminders == null) return new List<Reminder>();
 
-            return instance.reminders
-                .Where(r => !r.completed && !r.dismissed)
-                .ToList();
+                return instance.reminders
+                    .Where(r => r != null && !r.completed && !r.dismissed)
+                    .ToList();
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"[Riminder] Error getting active reminders: {ex}");
+                return new List<Reminder>();
+            }
         }
 
         public static List<PawnTendReminder> GetActiveTendReminders()
         {
-            if (instance == null) return new List<PawnTendReminder>();
+            if (Current.Game == null || Find.CurrentMap == null)
+            {
+                return new List<PawnTendReminder>();
+            }
+            
+            try
+            {
+                if (instance == null) return new List<PawnTendReminder>();
+                if (instance.reminders == null) return new List<PawnTendReminder>();
 
-            return instance.reminders
-                .Where(r => r is PawnTendReminder && !r.completed && !r.dismissed)
-                .Cast<PawnTendReminder>()
-                .ToList();
+                return instance.reminders
+                    .Where(r => r != null && r is PawnTendReminder && !r.completed && !r.dismissed)
+                    .Cast<PawnTendReminder>()
+                    .ToList();
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"[Riminder] Error getting active tend reminders: {ex}");
+                return new List<PawnTendReminder>();
+            }
         }
 
         public static void RemoveReminder(string id)
         {
-            if (instance == null) return;
-
-            instance.reminders.RemoveAll(r => r.id == id);
-
-            // Refresh any open reminder dialogs
-            var openDialogs = Find.WindowStack?.Windows?.OfType<Dialog_ViewReminders>();
-            if (openDialogs != null && openDialogs.Any())
+            try
             {
-                foreach (var dialog in openDialogs)
+                if (instance == null) return;
+                if (instance.reminders == null) return;
+                if (string.IsNullOrEmpty(id)) return;
+
+                instance.reminders.RemoveAll(r => r != null && r.id == id);
+
+                try
                 {
-                    dialog.RefreshAndRedraw();
+                    var openDialogs = Find.WindowStack?.Windows?.OfType<Dialog_ViewReminders>().ToList();
+                    if (openDialogs != null && openDialogs.Any())
+                    {
+                        foreach (var dialog in openDialogs)
+                        {
+                            if (dialog != null)
+                            {
+                                dialog.RefreshAndRedraw();
+                            }
+                        }
+                    }
                 }
+                catch (Exception) { }
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"[Riminder] Error removing reminder: {ex}");
             }
         }
 
         public override void ExposeData()
         {
-            base.ExposeData();
-            Scribe_Collections.Look(ref reminders, "reminders", LookMode.Deep);
-
-            if (Scribe.mode == LoadSaveMode.LoadingVars && reminders == null)
+            try
             {
-                reminders = new List<Reminder>();
-            }
+                base.ExposeData();
+                Scribe_Collections.Look(ref reminders, "reminders", LookMode.Deep);
 
-            if (Scribe.mode == LoadSaveMode.PostLoadInit)
-            {
-                instance = this;
-
-                for (int i = reminders.Count - 1; i >= 0; i--)
+                if (Scribe.mode == LoadSaveMode.LoadingVars && reminders == null)
                 {
-                    if (reminders[i].completed || reminders[i].dismissed)
+                    reminders = new List<Reminder>();
+                }
+
+                if (Scribe.mode == LoadSaveMode.PostLoadInit)
+                {
+                    instance = this;
+
+                    if (reminders != null)
                     {
-                        reminders.RemoveAt(i);
+                        reminders.RemoveAll(r => r == null);
+
+                        for (int i = reminders.Count - 1; i >= 0; i--)
+                        {
+                            if (reminders[i].completed || reminders[i].dismissed)
+                            {
+                                reminders.RemoveAt(i);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        reminders = new List<Reminder>();
                     }
                 }
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"[Riminder] Error in ExposeData: {ex}");
+                reminders = new List<Reminder>();
             }
         }
     }

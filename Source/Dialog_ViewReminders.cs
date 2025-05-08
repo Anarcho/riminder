@@ -20,7 +20,7 @@ namespace Riminder
         private const float ButtonHeight = 30f;
         private const float ButtonWidth = 100f;
         private const float ReminderSpacing = 20f;
-        private const float ReminderHeight = LineHeight * 4; // Increased from 3 to 4 to accommodate more text
+        private const float ReminderHeight = LineHeight * 4;
 
         public Dialog_ViewReminders()
         {
@@ -139,11 +139,29 @@ namespace Riminder
 
                 bool prevWordWrap = Text.WordWrap;
                 Text.WordWrap = true;
-                Rect descRect = new Rect(infoRect.x, infoRect.y + LineHeight, infoRect.width, LineHeight * 2); // Increased height
-                Widgets.Label(descRect, reminder.description);
+                Rect descRect = new Rect(infoRect.x, infoRect.y + LineHeight, infoRect.width, LineHeight * 2);
+                
+                if (reminder is PawnTendReminder tendReminder)
+                {
+                    Widgets.Label(descRect, tendReminder.description);
+                    
+                    string deathTimeInfo = tendReminder.GetTimeUntilDeathInfo();
+                    if (!string.IsNullOrEmpty(deathTimeInfo))
+                    {
+                        Rect deathTimeRect = new Rect(infoRect.x, infoRect.y + LineHeight * 2.5f, infoRect.width, LineHeight);
+                        GUI.color = new Color(1f, 0.3f, 0.3f);
+                        Widgets.Label(deathTimeRect, deathTimeInfo);
+                        GUI.color = Color.white;
+                    }
+                }
+                else
+                {
+                    Widgets.Label(descRect, reminder.description);
+                }
+                
                 Text.WordWrap = prevWordWrap;
 
-                Rect freqRect = new Rect(infoRect.x, infoRect.y + LineHeight * 3, infoRect.width / 2, LineHeight); // Adjusted Y position
+                Rect freqRect = new Rect(infoRect.x, infoRect.y + LineHeight * 3, infoRect.width / 2, LineHeight);
                 Widgets.Label(freqRect, "Frequency: " + reminder.GetFrequencyDisplayString());
 
                 float buttonRowY = infoRect.y + LineHeight * 3;
@@ -172,20 +190,31 @@ namespace Riminder
 
                 if (isPawnTendReminder)
                 {
-                    PawnTendReminder tendReminder = (PawnTendReminder)reminder;
+                    PawnTendReminder pawnTendReminder = (PawnTendReminder)reminder;
                     buttonX -= buttonWidth + buttonSpacing;
                     Rect jumpRect = new Rect(buttonX, buttonRowY, buttonWidth, LineHeight);
                     if (Widgets.ButtonText(jumpRect, "Jump to Pawn"))
                     {
-                        Pawn pawn = tendReminder.FindPawn();
-                        if (pawn != null)
+                        try
                         {
-                            CameraJumper.TryJump(pawn);
-                            Close();
+                            Pawn pawn = pawnTendReminder.FindPawn();
+                            if (pawn != null)
+                            {
+                                CameraJumper.TryJump(pawn);
+                                Close();
+                            }
+                            else
+                            {
+                                Messages.Message("Pawn no longer exists", MessageTypeDefOf.RejectInput, false);
+                            }
                         }
-                        else
+                        catch (Exception ex)
                         {
-                            Messages.Message("Pawn no longer exists", MessageTypeDefOf.RejectInput, false);
+                            if (Prefs.DevMode)
+                            {
+                                Log.Error($"[Riminder] Error jumping to pawn: {ex}");
+                            }
+                            Messages.Message("Could not jump to pawn", MessageTypeDefOf.RejectInput, false);
                         }
                     }
                 }
@@ -214,13 +243,29 @@ namespace Riminder
                 if (reminder is PawnTendReminder tendReminder)
                 {
                     Pawn pawn = tendReminder.FindPawn();
+                    if (pawn == null) continue;
+                    
                     Hediff hediff = tendReminder.FindHediff(pawn);
-
-                    if (pawn == null || hediff == null) continue;
+                    if (hediff == null) continue;
 
                     if (hediff is HediffWithComps hwc)
                     {
                         string desc = $"Reminder to tend to {pawn.LabelShort}'s {hediff.Label} ({hediff.def.label})";
+                        
+                        var immunityComp = hwc.TryGetComp<HediffComp_Immunizable>();
+                        if (immunityComp != null)
+                        {
+                            desc += $"\nImmunity Progress: {immunityComp.Immunity:P0}";
+                            
+                            if (immunityComp.Immunity >= 0.8f)
+                            {
+                                desc += " (Almost immune)";
+                            }
+                            else if (immunityComp.Immunity >= 0.5f)
+                            {
+                                desc += " (Good progress)";
+                            }
+                        }
                         
                         if (hediff.CurStage != null && hediff.CurStage.lifeThreatening && hediff.def.lethalSeverity > 0)
                         {
@@ -244,6 +289,38 @@ namespace Riminder
                                     {
                                         desc += $"\nLethal in: {hoursUntilDeath:F1} hours";
                                     }
+                                    
+                                    if (immunityComp != null && tendReminder is PawnTendReminder pawnTendReminder)
+                                    {
+                                        float immunityGainPerDay = 0f;
+                                        var tendCompForDisease = hwc.TryGetComp<HediffComp_TendDuration>();
+                                        
+                                        if (tendCompForDisease != null && hwc.def.CompProps<HediffCompProperties_Immunizable>() != null)
+                                        {
+                                            float baseImmunityGain = hwc.def.CompProps<HediffCompProperties_Immunizable>().immunityPerDaySick;
+                                            
+                                            baseImmunityGain *= pawn.GetStatValue(StatDefOf.ImmunityGainSpeed);
+                                            
+                                            if (tendCompForDisease.IsTended)
+                                            {
+                                                float tendBonus = tendCompForDisease.tendQuality * 0.3f;
+                                                baseImmunityGain += tendBonus;
+                                            }
+                                            
+                                            immunityGainPerDay = baseImmunityGain;
+                                            
+                                            float daysUntilImmune = (1f - immunityComp.Immunity) / immunityGainPerDay;
+                                            
+                                            if (daysUntilImmune * 24 < hoursUntilDeath)
+                                            {
+                                                desc += " (Will recover with current care)";
+                                            }
+                                            else
+                                            {
+                                                desc += " (Critical - improve tend quality)";
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -258,6 +335,10 @@ namespace Riminder
                                 if (hoursLeft > 0)
                                 {
                                     desc += $", next tend in {hoursLeft:F1}h";
+                                }
+                                else
+                                {
+                                    desc += ", needs tending now";
                                 }
                             }
                             else

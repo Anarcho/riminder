@@ -145,34 +145,70 @@ namespace Riminder
                     if (__instance?.Pawn == null || !__instance.Pawn.IsColonist) return;
                     if (__instance.parent == null) return;
 
-                    if (HediffUtility.IsTended(__instance.parent))
+                    string pawnId = __instance.Pawn.ThingID;
+                    var tendReminders = RiminderManager.GetActiveReminders()
+                        ?.OfType<PawnTendReminder>()
+                        ?.Where(r => r?.pawnId == pawnId)
+                        ?.ToList();
+
+                    if (tendReminders == null || !tendReminders.Any()) return;
+                    
+                    if (Find.TickManager.TicksGame % 60 == 0)
                     {
-                        string loadIdStr = __instance.parent.loadID.ToString();
-                        string alternateId = $"{__instance.Pawn.ThingID}_{__instance.parent.def.defName}";
-
-                        var reminders = RiminderManager.GetActiveReminders()
-                            .OfType<PawnTendReminder>()
-                            .Where(r => r.pawnId == __instance.Pawn.ThingID &&
-                                       (r.hediffId == loadIdStr || r.hediffId == alternateId ||
-                                        r.hediffId.Contains(__instance.parent.def.defName)));
-
-                        foreach (var reminder in reminders)
+                        foreach (var reminder in tendReminders)
                         {
-                            reminder.UpdateLabelAndDescription(__instance.Pawn);
-                            reminder.Trigger();
-                        }
-
-                        var openDialogs = Find.WindowStack?.Windows?.OfType<Dialog_ViewReminders>();
-                        if (openDialogs != null && openDialogs.Any())
-                        {
-                            foreach (var dialog in openDialogs)
+                            try
                             {
-                                dialog.RefreshAndRedraw();
+                                reminder?.UpdateLabelAndDescription(__instance.Pawn);
+                            }
+                            catch (Exception ex)
+                            {
+                                if (Prefs.DevMode)
+                                {
+                                    Log.Error($"[Riminder] Error updating reminder: {ex}");
+                                }
+                            }
+                        }
+                        
+                        foreach (var reminder in tendReminders)
+                        {
+                            try 
+                            {
+                                reminder?.Trigger();
+                            }
+                            catch (Exception ex)
+                            {
+                                if (Prefs.DevMode)
+                                {
+                                    Log.Error($"[Riminder] Error triggering reminder: {ex}");
+                                }
                             }
                         }
                     }
+
+                    if (Find.TickManager.TicksGame % 120 == 0)
+                    {
+                        try
+                        {
+                            var openDialogs = Find.WindowStack?.Windows?.OfType<Dialog_ViewReminders>()?.ToList();
+                            if (openDialogs != null && openDialogs.Any())
+                            {
+                                foreach (var dialog in openDialogs)
+                                {
+                                    dialog?.RefreshAndRedraw();
+                                }
+                            }
+                        }
+                        catch (Exception) { }
+                    }
                 }
-                catch (Exception) { }
+                catch (Exception ex)
+                {
+                    if (Prefs.DevMode)
+                    {
+                        Log.Error($"[Riminder] Error in tend comp patch: {ex}");
+                    }
+                }
             }
         }
 
@@ -330,7 +366,6 @@ namespace Riminder
                     var pawn = GetPawn(__instance);
                     if (pawn == null || !pawn.IsColonist || hediff == null) return;
 
-                    // First, remove any reminders specifically for this hediff
                     string loadIdStr = hediff.loadID.ToString();
                     string alternateId = $"{pawn.ThingID}_{hediff.def.defName}";
 
@@ -343,13 +378,11 @@ namespace Riminder
                                     r.hediffLabel == hediff.def.label))
                         .ToList();
 
-                    // Now check if this was the last tendable condition for the pawn
                     bool hasTendableConditions = pawn.health.hediffSet.hediffs
                         .Any(h => h != hediff && h.def.tendable && !h.IsPermanent());
 
                     if (!hasTendableConditions)
                     {
-                        // If no more tendable conditions, remove all tend reminders for this pawn
                         var allPawnReminders = RiminderManager.GetActiveReminders()
                             .OfType<PawnTendReminder>()
                             .Where(r => r.pawnId == pawn.ThingID)
@@ -383,7 +416,6 @@ namespace Riminder
                     if (pawn == null || !pawn.IsColonist || hediff == null) return;
                     if (hediff.IsPermanent()) return;
 
-                    // Update all tend reminders for this pawn when any hediff changes
                     var existingReminders = RiminderManager.GetActiveReminders()
                         .OfType<PawnTendReminder>()
                         .Where(r => r.pawnId == pawn.ThingID)
@@ -394,8 +426,6 @@ namespace Riminder
                         reminder.UpdateLabelAndDescription(pawn);
                         reminder.Trigger();
                     }
-
-                    // RefreshAndRedraw of any open dialogs is handled by UpdateLabelAndDescription
                 }
                 catch (Exception ex)
                 {
