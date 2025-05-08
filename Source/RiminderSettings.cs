@@ -7,7 +7,6 @@ namespace Riminder
 {
     public class RiminderSettings : ModSettings
     {
-        // Settings
         public bool showNotifications = true;
         public bool autoCreateTendReminders = true;
         public float notificationDuration = 5f;

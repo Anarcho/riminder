@@ -9,15 +9,15 @@ namespace Riminder
     {
         private PawnTendReminder reminder;
         private bool removeOnImmunity;
-        
+
         private const float LeftMargin = 20f;
         private const float ControlHeight = 30f;
-        
+
         public Dialog_EditTendReminder(PawnTendReminder reminder)
         {
             this.reminder = reminder;
             this.removeOnImmunity = reminder.removeOnImmunity;
-            
+
             forcePause = false;
             doCloseX = true;
             doCloseButton = false;
@@ -32,24 +32,21 @@ namespace Riminder
         {
             float contentWidth = inRect.width - 40f;
             float currentY = 10f;
-            
-            // Title
+
             Text.Font = GameFont.Medium;
             Widgets.Label(new Rect(LeftMargin, currentY, contentWidth, ControlHeight), "Edit Tend Reminder");
             Text.Font = GameFont.Small;
             currentY += ControlHeight + 20f;
-            
-            // Show pawn and hediff info
+
             Pawn pawn = reminder.FindPawn();
             Hediff hediff = reminder.FindHediff(pawn);
-            
+
             if (pawn != null && hediff != null)
             {
                 string hediffInfo = $"Tending reminder for {pawn.LabelShort}'s {hediff.Label}";
                 Widgets.Label(new Rect(LeftMargin, currentY, contentWidth, ControlHeight), hediffInfo);
                 currentY += ControlHeight + 10f;
-                
-                // Show current tend quality and time left if available
+
                 if (hediff is HediffWithComps hwc)
                 {
                     var tendComp = hwc.TryGetComp<HediffComp_TendDuration>();
@@ -66,7 +63,6 @@ namespace Riminder
                     }
                 }
 
-                // Add immunity checkbox if the hediff is a disease
                 if (hediff is HediffWithComps diseaseHediff && diseaseHediff.TryGetComp<HediffComp_Immunizable>() != null)
                 {
                     Rect immunityRect = new Rect(LeftMargin, currentY, contentWidth, ControlHeight);
@@ -74,17 +70,16 @@ namespace Riminder
                     currentY += ControlHeight + 10f;
                 }
             }
-            
-            // Buttons
+
             float bottomY = inRect.height - 50f;
             float buttonWidth = 100f;
-            
+
             if (Widgets.ButtonText(new Rect(inRect.width / 2 - buttonWidth - 5f, bottomY, buttonWidth, ControlHeight), "Cancel"))
             {
                 Close();
                 Find.WindowStack.Add(new Dialog_ViewReminders());
             }
-            
+
             if (Widgets.ButtonText(new Rect(inRect.width / 2 + 5f, bottomY, buttonWidth, ControlHeight), "Save"))
             {
                 reminder.removeOnImmunity = removeOnImmunity;
@@ -94,4 +89,4 @@ namespace Riminder
             }
         }
     }
-} 
+}

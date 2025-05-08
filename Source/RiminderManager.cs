@@ -34,31 +34,24 @@ namespace Riminder
         {
             base.GameComponentTick();
 
-            // Check reminders only once every 60 ticks (1 in-game second)
             if (Find.TickManager.TicksGame % 60 != 0) return;
 
             int currentTick = Find.TickManager.TicksGame;
-            
-            // Check for triggered reminders
+
             for (int i = reminders.Count - 1; i >= 0; i--)
             {
                 Reminder reminder = reminders[i];
-                
-                // Immediately remove completed or dismissed reminders
+
                 if (reminder.completed || reminder.dismissed)
                 {
                     reminders.RemoveAt(i);
                     continue;
                 }
-                
-                // Check if it's time to trigger
+
                 if (currentTick >= reminder.triggerTick)
                 {
-                    // Trigger the reminder
                     reminder.Trigger();
-                    
-                    // If it's a one-time reminder, it will be marked as completed
-                    // Remove it immediately if it's now completed
+
                     if (reminder.completed)
                     {
                         reminders.RemoveAt(i);
@@ -74,42 +67,37 @@ namespace Riminder
                 Log.Error("Cannot add reminder - RiminderManager not initialized");
                 return;
             }
-            
-            // Check for duplicates before adding
+
             if (reminder is PawnTendReminder tendReminder)
             {
-                // For tend reminders, check if we already have one for this pawn + condition
-                bool isDuplicate = instance.reminders.Any(r => 
+                bool isDuplicate = instance.reminders.Any(r =>
                     r is PawnTendReminder tr &&
                     !r.completed && !r.dismissed &&
-                    tr.pawnId == tendReminder.pawnId && 
+                    tr.pawnId == tendReminder.pawnId &&
                     tr.hediffLabel == tendReminder.hediffLabel);
-                
+
                 if (isDuplicate)
                 {
-                    // Skip adding this duplicate remind
                     return;
                 }
             }
-            
+
             instance.reminders.Add(reminder);
         }
 
         public static List<Reminder> GetActiveReminders()
         {
             if (instance == null) return new List<Reminder>();
-            
-            // Filter out completed and dismissed reminders
+
             return instance.reminders
                 .Where(r => !r.completed && !r.dismissed)
                 .ToList();
         }
-        
+
         public static List<PawnTendReminder> GetActiveTendReminders()
         {
             if (instance == null) return new List<PawnTendReminder>();
-            
-            // Return only PawnTendReminder instances that are active
+
             return instance.reminders
                 .Where(r => r is PawnTendReminder && !r.completed && !r.dismissed)
                 .Cast<PawnTendReminder>()
@@ -119,7 +107,7 @@ namespace Riminder
         public static void RemoveReminder(string id)
         {
             if (instance == null) return;
-            
+
             instance.reminders.RemoveAll(r => r.id == id);
         }
 
@@ -127,8 +115,7 @@ namespace Riminder
         {
             base.ExposeData();
             Scribe_Collections.Look(ref reminders, "reminders", LookMode.Deep);
-            
-            // Initialize list if null
+
             if (Scribe.mode == LoadSaveMode.LoadingVars && reminders == null)
             {
                 reminders = new List<Reminder>();
@@ -137,8 +124,7 @@ namespace Riminder
             if (Scribe.mode == LoadSaveMode.PostLoadInit)
             {
                 instance = this;
-                
-                // Remove any completed or dismissed reminders on load
+
                 for (int i = reminders.Count - 1; i >= 0; i--)
                 {
                     if (reminders[i].completed || reminders[i].dismissed)
@@ -149,4 +135,4 @@ namespace Riminder
             }
         }
     }
-} 
+}

@@ -26,7 +26,6 @@ namespace Riminder
         public bool completed;
         public bool dismissed;
 
-        // Empty constructor for loading
         public Reminder() { }
 
         public Reminder(string label, string description, int triggerTick, ReminderFrequency frequency = ReminderFrequency.OneTime)
@@ -56,14 +55,12 @@ namespace Riminder
         public virtual void Trigger()
         {
             if (dismissed) return;
-            
-            // Always show letter notifications
+
             Find.LetterStack.ReceiveLetter(
                 "Reminder: " + label,
                 description,
                 LetterDefOf.NeutralEvent);
-            
-            // Log the reminder trigger
+
             Log.Message($"[Riminder] Reminder triggered: {label}");
 
             if (RiminderMod.Settings.pauseOnReminder)
@@ -71,22 +68,19 @@ namespace Riminder
                 Find.TickManager.Pause();
             }
 
-            // If one-time reminder, mark as completed
             if (frequency == ReminderFrequency.OneTime)
             {
                 completed = true;
                 return;
             }
 
-            // Schedule next occurrence based on frequency
             RescheduleNext();
         }
 
         public void RescheduleNext()
         {
             int currentTick = Find.TickManager.TicksGame;
-            
-            // Calculate next occurrence based on frequency
+
             switch (frequency)
             {
                 case ReminderFrequency.Daily:
@@ -96,13 +90,13 @@ namespace Riminder
                     triggerTick = currentTick + GenDate.TicksPerDay * 7;
                     break;
                 case ReminderFrequency.Monthly:
-                    triggerTick = currentTick + GenDate.TicksPerDay * 30; // Approximation
+                    triggerTick = currentTick + GenDate.TicksPerDay * 30;
                     break;
                 case ReminderFrequency.Quarterly:
-                    triggerTick = currentTick + GenDate.TicksPerDay * 90; // Approximation
+                    triggerTick = currentTick + GenDate.TicksPerDay * 90;
                     break;
                 case ReminderFrequency.Yearly:
-                    triggerTick = currentTick + GenDate.TicksPerDay * 60; // One year in RimWorld (60 days)
+                    triggerTick = currentTick + GenDate.TicksPerDay * 60;
                     break;
             }
         }
@@ -118,58 +112,47 @@ namespace Riminder
         {
             int ticksLeft = triggerTick - Find.TickManager.TicksGame;
             if (ticksLeft <= 0) return "Now";
-            
-            // RimWorld calendar conversion
-            // 1 year = 60 days
-            // 1 quadrum (season/quarter) = 15 days
-            // Use RimWorld's own calendar system for accurate display
-            
+
             const int daysPerYear = 60;
-            const int daysPerQuadrum = 15; // 4 quadrums per year
-            
+            const int daysPerQuadrum = 15;
+
             int daysLeft = ticksLeft / GenDate.TicksPerDay;
             int hoursLeft = (ticksLeft % GenDate.TicksPerDay) / GenDate.TicksPerHour;
-            
-            // Calculate years, quadrums, and remaining days
+
             int years = daysLeft / daysPerYear;
             int remainingDaysAfterYears = daysLeft % daysPerYear;
             int quadrums = remainingDaysAfterYears / daysPerQuadrum;
             int remainingDays = remainingDaysAfterYears % daysPerQuadrum;
-            
-            // Build the string
+
             System.Text.StringBuilder result = new System.Text.StringBuilder("in ");
             bool hasAdded = false;
-            
-            // Years
+
             if (years > 0)
             {
                 result.Append(years == 1 ? "1 year" : $"{years} years");
                 hasAdded = true;
             }
-            
-            // Quadrums (seasons/quarters)
+
             if (quadrums > 0)
             {
                 if (hasAdded) result.Append(", ");
                 result.Append(quadrums == 1 ? "1 quadrum" : $"{quadrums} quadrums");
                 hasAdded = true;
             }
-            
-            // Days
+
             if (remainingDays > 0 || (!hasAdded && hoursLeft == 0))
             {
                 if (hasAdded) result.Append(", ");
                 result.Append(remainingDays == 1 ? "1 day" : $"{remainingDays} days");
                 hasAdded = true;
             }
-            
-            // Hours - only show if less than 1 day left
+
             if (hoursLeft > 0 && daysLeft == 0)
             {
                 if (hasAdded) result.Append(", ");
                 result.Append(hoursLeft == 1 ? "1 hour" : $"{hoursLeft} hours");
             }
-            
+
             return result.ToString();
         }
 
@@ -201,4 +184,4 @@ namespace Riminder
             }
         }
     }
-} 
+}
