@@ -7,7 +7,7 @@
 *.pdb
 Library/
 Temp/
-obj/
+/Source/obj
 Build/
 Builds/
 .vscode/

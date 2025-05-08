@@ -7,7 +7,7 @@ namespace Riminder
 {
     public class Dialog_EditTendReminder : Window
     {
-        private PawnTendReminder reminder;
+        private readonly PawnTendReminder reminder;
         private bool removeOnImmunity;
 
         private const float LeftMargin = 20f;
@@ -15,7 +15,7 @@ namespace Riminder
 
         public Dialog_EditTendReminder(PawnTendReminder reminder)
         {
-            this.reminder = reminder;
+            this.reminder = reminder ?? throw new ArgumentNullException(nameof(reminder));
             this.removeOnImmunity = reminder.removeOnImmunity;
 
             forcePause = false;
@@ -30,7 +30,7 @@ namespace Riminder
 
         public override void DoWindowContents(Rect inRect)
         {
-            float contentWidth = inRect.width - 40f;
+            float contentWidth = inRect.width - (LeftMargin * 2);
             float currentY = 10f;
 
             Text.Font = GameFont.Medium;
@@ -43,8 +43,7 @@ namespace Riminder
 
             if (pawn != null && hediff != null)
             {
-                string hediffInfo = $"Tending reminder for {pawn.LabelShort}'s {hediff.Label}";
-                Widgets.Label(new Rect(LeftMargin, currentY, contentWidth, ControlHeight), hediffInfo);
+                Widgets.Label(new Rect(LeftMargin, currentY, contentWidth, ControlHeight), $"Tending reminder for {pawn.LabelShort}'s {hediff.Label}");
                 currentY += ControlHeight + 10f;
 
                 if (hediff is HediffWithComps hwc)
@@ -52,35 +51,33 @@ namespace Riminder
                     var tendComp = hwc.TryGetComp<HediffComp_TendDuration>();
                     if (tendComp != null)
                     {
-                        string qualityInfo = $"Current tend quality: {tendComp.tendQuality:P0}";
-                        Widgets.Label(new Rect(LeftMargin, currentY, contentWidth, ControlHeight), qualityInfo);
+                        Widgets.Label(new Rect(LeftMargin, currentY, contentWidth, ControlHeight), $"Current tend quality: {tendComp.tendQuality:P0}");
                         currentY += ControlHeight + 10f;
 
                         float hoursLeft = tendComp.tendTicksLeft / (float)GenDate.TicksPerHour;
-                        string timeInfo = $"Time until next tending needed: {hoursLeft:F1} hours";
-                        Widgets.Label(new Rect(LeftMargin, currentY, contentWidth, ControlHeight), timeInfo);
+                        Widgets.Label(new Rect(LeftMargin, currentY, contentWidth, ControlHeight), $"Time until next tending needed: {hoursLeft:F1} hours");
                         currentY += ControlHeight + 10f;
                     }
                 }
 
                 if (hediff is HediffWithComps diseaseHediff && diseaseHediff.TryGetComp<HediffComp_Immunizable>() != null)
                 {
-                    Rect immunityRect = new Rect(LeftMargin, currentY, contentWidth, ControlHeight);
-                    Widgets.CheckboxLabeled(immunityRect, "Remove reminder when immunity is reached", ref removeOnImmunity);
+                    Rect checkboxRect = new Rect(LeftMargin, currentY, contentWidth, ControlHeight);
+                    Widgets.CheckboxLabeled(checkboxRect, "Remove reminder when immunity is reached", ref removeOnImmunity);
                     currentY += ControlHeight + 10f;
                 }
             }
 
-            float bottomY = inRect.height - 50f;
+            float buttonY = inRect.height - ControlHeight - 10f;
             float buttonWidth = 100f;
 
-            if (Widgets.ButtonText(new Rect(inRect.width / 2 - buttonWidth - 5f, bottomY, buttonWidth, ControlHeight), "Cancel"))
+            if (Widgets.ButtonText(new Rect(inRect.width / 2 - buttonWidth - 5f, buttonY, buttonWidth, ControlHeight), "Cancel"))
             {
                 Close();
                 Find.WindowStack.Add(new Dialog_ViewReminders());
             }
 
-            if (Widgets.ButtonText(new Rect(inRect.width / 2 + 5f, bottomY, buttonWidth, ControlHeight), "Save"))
+            if (Widgets.ButtonText(new Rect(inRect.width / 2 + 5f, buttonY, buttonWidth, ControlHeight), "Save"))
             {
                 reminder.removeOnImmunity = removeOnImmunity;
                 Messages.Message("Tend reminder updated", MessageTypeDefOf.TaskCompletion, false);
