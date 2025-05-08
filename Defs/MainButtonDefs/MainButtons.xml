@@ -6,7 +6,6 @@
     <description>Create and manage reminders.</description>
     <tabWindowClass>Riminder.Dialog_ViewReminders</tabWindowClass>
     <order>80</order>
-    <defaultHotKey>R</defaultHotKey>
     <minimized>False</minimized>
     <buttonVisible>True</buttonVisible>
     <workerClass>Riminder.MainButtonWorker_Riminder</workerClass>

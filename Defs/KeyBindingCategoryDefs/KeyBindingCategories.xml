@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8" ?>
-<Defs>
-  <KeyBindingCategoryDef>
-    <defName>Riminder</defName>
-    <label>Riminder</label>
-    <description>Key bindings for the Riminder mod.</description>
-  </KeyBindingCategoryDef>
-</Defs> 
