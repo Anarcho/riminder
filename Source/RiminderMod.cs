@@ -14,6 +14,7 @@ namespace Riminder
         {
             Settings = GetSettings<RiminderSettings>();
             RiminderManager.Initialize();
+            AutoTendReminderManager.Initialize();
         }
 
         public override string SettingsCategory()

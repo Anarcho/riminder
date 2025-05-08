@@ -17,4 +17,5 @@ Textures/Thumbs.db
 *.sln.cache
 .DS_Store
 desktop.ini
-/.vs
+.vs/
+.idea/

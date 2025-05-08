@@ -153,12 +153,22 @@ namespace Riminder
                         var reminders = RiminderManager.GetActiveReminders()
                             .OfType<PawnTendReminder>()
                             .Where(r => r.pawnId == __instance.Pawn.ThingID &&
-                                        (r.hediffId == loadIdStr || r.hediffId == alternateId ||
-                                         r.hediffId.Contains(__instance.parent.def.defName)));
+                                       (r.hediffId == loadIdStr || r.hediffId == alternateId ||
+                                        r.hediffId.Contains(__instance.parent.def.defName)));
 
                         foreach (var reminder in reminders)
                         {
+                            reminder.UpdateLabelAndDescription(__instance.Pawn);
                             reminder.Trigger();
+                        }
+
+                        var openDialogs = Find.WindowStack?.Windows?.OfType<Dialog_ViewReminders>();
+                        if (openDialogs != null && openDialogs.Any())
+                        {
+                            foreach (var dialog in openDialogs)
+                            {
+                                dialog.RefreshAndRedraw();
+                            }
                         }
                     }
                 }
@@ -320,17 +330,35 @@ namespace Riminder
                     var pawn = GetPawn(__instance);
                     if (pawn == null || !pawn.IsColonist || hediff == null) return;
 
+                    // First, remove any reminders specifically for this hediff
                     string loadIdStr = hediff.loadID.ToString();
                     string alternateId = $"{pawn.ThingID}_{hediff.def.defName}";
 
-                    var reminders = RiminderManager.GetActiveReminders()
+                    var remindersToRemove = RiminderManager.GetActiveReminders()
                         .OfType<PawnTendReminder>()
                         .Where(r => r.pawnId == pawn.ThingID &&
-                                   (r.hediffId == loadIdStr || r.hediffId == alternateId ||
+                                   (r.hediffId == loadIdStr || 
+                                    r.hediffId == alternateId ||
+                                    r.hediffId.Contains(hediff.def.defName) ||
                                     r.hediffLabel == hediff.def.label))
                         .ToList();
 
-                    foreach (var reminder in reminders)
+                    // Now check if this was the last tendable condition for the pawn
+                    bool hasTendableConditions = pawn.health.hediffSet.hediffs
+                        .Any(h => h != hediff && h.def.tendable && !h.IsPermanent());
+
+                    if (!hasTendableConditions)
+                    {
+                        // If no more tendable conditions, remove all tend reminders for this pawn
+                        var allPawnReminders = RiminderManager.GetActiveReminders()
+                            .OfType<PawnTendReminder>()
+                            .Where(r => r.pawnId == pawn.ThingID)
+                            .ToList();
+                        
+                        remindersToRemove.AddRange(allPawnReminders);
+                    }
+
+                    foreach (var reminder in remindersToRemove.Distinct())
                     {
                         RiminderManager.RemoveReminder(reminder.id);
                     }
@@ -355,43 +383,19 @@ namespace Riminder
                     if (pawn == null || !pawn.IsColonist || hediff == null) return;
                     if (hediff.IsPermanent()) return;
 
-                    if (hediff is HediffWithComps hediffWithComps)
+                    // Update all tend reminders for this pawn when any hediff changes
+                    var existingReminders = RiminderManager.GetActiveReminders()
+                        .OfType<PawnTendReminder>()
+                        .Where(r => r.pawnId == pawn.ThingID)
+                        .ToList();
+
+                    foreach (var reminder in existingReminders)
                     {
-                        var tendComp = hediffWithComps.TryGetComp<HediffComp_TendDuration>();
-                        if (tendComp != null)
-                        {
-                            string loadIdStr = hediff.loadID.ToString();
-                            string alternateId = $"{pawn.ThingID}_{hediff.def.defName}";
-
-                            var existingReminders = RiminderManager.GetActiveReminders()
-                                .OfType<PawnTendReminder>()
-                                .Where(r => r.pawnId == pawn.ThingID &&
-                                       (r.hediffId == loadIdStr ||
-                                        r.hediffId == alternateId ||
-                                        r.hediffId.Contains(hediff.def.defName) ||
-                                        r.hediffLabel == hediff.def.label ||
-                                        hediff.def.defName.Contains(r.hediffLabel) ||
-                                        hediff.def.label == r.hediffLabel))
-                                .ToList();
-
-                            foreach (var reminder in existingReminders)
-                            {
-                                reminder.Trigger();
-                            }
-
-                            if (existingReminders.Count > 0)
-                            {
-                                var openDialogs = Find.WindowStack?.Windows?.OfType<Dialog_ViewReminders>();
-                                if (openDialogs != null && openDialogs.Any())
-                                {
-                                    foreach (var dialog in openDialogs)
-                                    {
-                                        dialog.RefreshTendReminders();
-                                    }
-                                }
-                            }
-                        }
+                        reminder.UpdateLabelAndDescription(pawn);
+                        reminder.Trigger();
                     }
+
+                    // RefreshAndRedraw of any open dialogs is handled by UpdateLabelAndDescription
                 }
                 catch (Exception ex)
                 {

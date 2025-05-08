@@ -20,7 +20,7 @@ namespace Riminder
         private const float ButtonHeight = 30f;
         private const float ButtonWidth = 100f;
         private const float ReminderSpacing = 20f;
-        private const float ReminderHeight = LineHeight * 3;
+        private const float ReminderHeight = LineHeight * 4; // Increased from 3 to 4 to accommodate more text
 
         public Dialog_ViewReminders()
         {
@@ -139,14 +139,14 @@ namespace Riminder
 
                 bool prevWordWrap = Text.WordWrap;
                 Text.WordWrap = true;
-                Rect descRect = new Rect(infoRect.x, infoRect.y + LineHeight, infoRect.width, LineHeight);
+                Rect descRect = new Rect(infoRect.x, infoRect.y + LineHeight, infoRect.width, LineHeight * 2); // Increased height
                 Widgets.Label(descRect, reminder.description);
                 Text.WordWrap = prevWordWrap;
 
-                Rect freqRect = new Rect(infoRect.x, infoRect.y + LineHeight * 2, infoRect.width / 2, LineHeight);
+                Rect freqRect = new Rect(infoRect.x, infoRect.y + LineHeight * 3, infoRect.width / 2, LineHeight); // Adjusted Y position
                 Widgets.Label(freqRect, "Frequency: " + reminder.GetFrequencyDisplayString());
 
-                float buttonRowY = infoRect.y + LineHeight * 2;
+                float buttonRowY = infoRect.y + LineHeight * 3;
                 float buttonWidth = 100f;
                 float buttonSpacing = 10f;
                 bool isPawnTendReminder = reminder is PawnTendReminder;
@@ -220,13 +220,40 @@ namespace Riminder
 
                     if (hediff is HediffWithComps hwc)
                     {
+                        string desc = $"Reminder to tend to {pawn.LabelShort}'s {hediff.Label} ({hediff.def.label})";
+                        
+                        if (hediff.CurStage != null && hediff.CurStage.lifeThreatening && hediff.def.lethalSeverity > 0)
+                        {
+                            float severityPerHour = 0f;
+                            HediffComp_SeverityPerDay severityComp = hediff.TryGetComp<HediffComp_SeverityPerDay>();
+                            if (severityComp != null)
+                            {
+                                severityPerHour = severityComp.SeverityChangePerDay() / 24f;
+                            }
+
+                            if (severityPerHour > 0)
+                            {
+                                float hoursUntilDeath = (hediff.def.lethalSeverity - hediff.Severity) / severityPerHour;
+                                if (hoursUntilDeath > 0)
+                                {
+                                    if (hoursUntilDeath > 24)
+                                    {
+                                        desc += $"\nLethal in: {hoursUntilDeath/24f:F1} days";
+                                    }
+                                    else
+                                    {
+                                        desc += $"\nLethal in: {hoursUntilDeath:F1} hours";
+                                    }
+                                }
+                            }
+                        }
+
                         var tendComp = hwc.TryGetComp<HediffComp_TendDuration>();
                         if (tendComp != null)
                         {
-                            string desc = $"Reminder to tend to {pawn.LabelShort}'s {hediff.Label} ({hediff.def.label})";
                             if (tendComp.IsTended)
                             {
-                                desc = $"Reminder to tend to {pawn.LabelShort}'s {hediff.Label} ({hediff.def.label}) (Quality: {tendComp.tendQuality:P0})";
+                                desc += $"\nTend Quality: {tendComp.tendQuality:P0}";
                                 float hoursLeft = tendComp.tendTicksLeft / (float)GenDate.TicksPerHour;
                                 if (hoursLeft > 0)
                                 {
@@ -235,14 +262,20 @@ namespace Riminder
                             }
                             else
                             {
-                                desc += " (needs tending)";
+                                desc += "\nNeeds tending now!";
                             }
-
-                            tendReminder.description = desc;
                         }
+
+                        tendReminder.description = desc;
                     }
                 }
             }
+        }
+
+        public void RefreshAndRedraw()
+        {
+            RefreshTendReminders();
+            reminders = RiminderManager.GetActiveReminders();
         }
     }
 }
