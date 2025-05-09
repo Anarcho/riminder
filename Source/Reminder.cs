@@ -7,11 +7,10 @@ namespace Riminder
     public enum ReminderFrequency
     {
         OneTime,
-        Daily,
-        Weekly,
-        Monthly,
-        Quarterly,
-        Yearly,
+        Days,
+        Quadrums,
+        Years,
+        Custom,
         WhenTendingRequired
     }
 
@@ -83,20 +82,18 @@ namespace Riminder
 
             switch (frequency)
             {
-                case ReminderFrequency.Daily:
+                case ReminderFrequency.Days:
                     triggerTick = currentTick + GenDate.TicksPerDay;
                     break;
-                case ReminderFrequency.Weekly:
-                    triggerTick = currentTick + GenDate.TicksPerDay * 7;
+                case ReminderFrequency.Quadrums:
+                    triggerTick = currentTick + GenDate.TicksPerQuadrum;
                     break;
-                case ReminderFrequency.Monthly:
-                    triggerTick = currentTick + GenDate.TicksPerDay * 30;
+                case ReminderFrequency.Years:
+                    triggerTick = currentTick + GenDate.TicksPerYear;
                     break;
-                case ReminderFrequency.Quarterly:
-                    triggerTick = currentTick + GenDate.TicksPerDay * 90;
-                    break;
-                case ReminderFrequency.Yearly:
-                    triggerTick = currentTick + GenDate.TicksPerDay * 60;
+                case ReminderFrequency.Custom:
+                    int interval = triggerTick - createdTick;
+                    triggerTick = currentTick + interval;
                     break;
             }
         }
@@ -176,16 +173,14 @@ namespace Riminder
             {
                 case ReminderFrequency.OneTime:
                     return "One Time";
-                case ReminderFrequency.Daily:
-                    return "Daily";
-                case ReminderFrequency.Weekly:
-                    return "Weekly";
-                case ReminderFrequency.Monthly:
-                    return "Monthly";
-                case ReminderFrequency.Quarterly:
-                    return "Quarterly";
-                case ReminderFrequency.Yearly:
-                    return "Yearly";
+                case ReminderFrequency.Days:
+                    return "Days";
+                case ReminderFrequency.Quadrums:
+                    return "Quadrums";
+                case ReminderFrequency.Years:
+                    return "Years";
+                case ReminderFrequency.Custom:
+                    return "Custom";
                 case ReminderFrequency.WhenTendingRequired:
                     return "Tending";
                 default:
