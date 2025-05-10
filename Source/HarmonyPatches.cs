@@ -152,15 +152,34 @@ namespace Riminder
                         ?.ToList();
 
                     if (tendReminders == null || !tendReminders.Any()) return;
-                    
-                    
-                    if (Find.TickManager.TicksGame % 120 == 0) 
+
+                    // Update reminders more frequently for infected/disease hediffs
+                    bool isDisease = __instance.parent?.def?.HasComp(typeof(HediffComp_Immunizable)) == true
+                        || __instance.parent is HediffWithComps hwc && hwc.TryGetComp<HediffComp_Immunizable>() != null;
+
+                    bool isUrgent = __instance.tendTicksLeft <= GenDate.TicksPerHour || !__instance.IsTended;
+
+                    // Check more frequently for diseases and if tend time is low
+                    int checkInterval = isDisease || isUrgent ? 30 : 120;
+
+                    if (Find.TickManager.TicksGame % checkInterval == 0)
                     {
-                        
                         foreach (var reminder in tendReminders)
                         {
                             try
                             {
+                                // Update total tend duration if not set
+                                if (reminder.totalTendDuration <= 0 && __instance.tendTicksLeft > 0)
+                                {
+                                    reminder.totalTendDuration = __instance.tendTicksLeft;
+                                }
+
+                                // Calculate progress
+                                if (__instance.IsTended && __instance.tendTicksLeft > 0 && reminder.totalTendDuration > 0)
+                                {
+                                    reminder.tendProgress = 1f - ((float)__instance.tendTicksLeft / reminder.totalTendDuration);
+                                }
+
                                 reminder?.Trigger();
                             }
                             catch (Exception ex)
@@ -261,13 +280,13 @@ namespace Riminder
         {
             private static HashSet<string> processedHediffs = new HashSet<string>();
 
-            
+
             public static bool IsProcessed(string key)
             {
                 return processedHediffs.Contains(key);
             }
 
-            
+
             public static void MarkAsProcessed(string key)
             {
                 processedHediffs.Add(key);
@@ -284,50 +303,50 @@ namespace Riminder
             {
                 public static void Postfix() => processedHediffs.Clear();
             }
-            
+
             private static bool IsDisease(Hediff hediff)
             {
                 if (hediff == null) return false;
-                
-                
+
+
                 if (hediff.def.HasComp(typeof(HediffComp_Immunizable)))
                     return true;
-                
-                
+
+
                 if (hediff is HediffWithComps hwc && hwc.TryGetComp<HediffComp_Immunizable>() != null)
                     return true;
-                
+
                 return false;
             }
-            
+
             private static bool IsActuallyTendable(Pawn pawn, Hediff hediff)
             {
                 if (hediff == null || pawn == null) return false;
-                
+
                 if (hediff.IsPermanent() || !hediff.def.tendable) return false;
-                
+
                 if (hediff.def.defName == "StoppingBlood") return false;
-                
-                if (hediff.def.defName.Contains("Missing") || 
+
+                if (hediff.def.defName.Contains("Missing") ||
                     hediff.def.defName.Contains("Removed") ||
                     hediff.def.defName.Contains("Scar") ||
-                    hediff.Label.ToLower().Contains("missing") || 
+                    hediff.Label.ToLower().Contains("missing") ||
                     hediff.Label.ToLower().Contains("removed") ||
                     hediff.Label.ToLower().Contains("scar"))
                     return false;
-                
+
                 if (hediff.def.chronic) return false;
-                
-                if (hediff.Part != null) 
+
+                if (hediff.Part != null)
                 {
                     bool partIsMissingOrDestroyed = false;
-                    
+
                     foreach (var otherHediff in pawn.health.hediffSet.hediffs)
                     {
                         if (otherHediff == hediff) continue;
-                        
-                        if (otherHediff.Part == hediff.Part && 
-                            (otherHediff.def.defName.Contains("Missing") || 
+
+                        if (otherHediff.Part == hediff.Part &&
+                            (otherHediff.def.defName.Contains("Missing") ||
                              otherHediff.def.defName.Contains("Removed") ||
                              otherHediff.def.defName == "SurgicalCut" ||
                              otherHediff.def.defName == "Stump"))
@@ -335,12 +354,12 @@ namespace Riminder
                             partIsMissingOrDestroyed = true;
                             break;
                         }
-                        
+
                         BodyPartRecord parentPart = hediff.Part.parent;
-                        while (parentPart != null) 
+                        while (parentPart != null)
                         {
-                            if (otherHediff.Part == parentPart && 
-                                (otherHediff.def.defName.Contains("Missing") || 
+                            if (otherHediff.Part == parentPart &&
+                                (otherHediff.def.defName.Contains("Missing") ||
                                  otherHediff.def.defName.Contains("Removed")))
                             {
                                 partIsMissingOrDestroyed = true;
@@ -348,25 +367,25 @@ namespace Riminder
                             }
                             parentPart = parentPart.parent;
                         }
-                        
+
                         if (partIsMissingOrDestroyed) break;
                     }
-                    
+
                     if (partIsMissingOrDestroyed) return false;
                 }
-                
+
                 if (hediff is Hediff_Injury injury)
                 {
-                    return injury.Severity > 0 && 
-                           !injury.IsPermanent() && 
+                    return injury.Severity > 0 &&
+                           !injury.IsPermanent() &&
                            injury.TendableNow();
                 }
-                
+
                 if (hediff is HediffWithComps hwc)
                 {
                     return hwc.TryGetComp<HediffComp_TendDuration>() != null;
                 }
-                
+
                 return false;
             }
 
@@ -378,58 +397,58 @@ namespace Riminder
 
                     var pawn = GetPawn(__instance);
                     if (pawn == null || !pawn.IsColonist) return;
-                    
+
                     if (!RiminderMod.Settings.autoCreateTendReminders) return;
-                    
-                    
+
+
                     bool isDiseaseHediff = IsDisease(hediff);
                     bool isTendable = IsActuallyTendable(pawn, hediff);
-                    
+
                     if (!isTendable && !isDiseaseHediff) return;
-                    
-                    
+
+
                     string hediffKey = $"{pawn.ThingID}|{hediff.def.defName}|{hediff.Part?.def.defName ?? "null"}";
-                    
-                    
+
+
                     if (!isDiseaseHediff && IsProcessed(hediffKey)) return;
-                    
+
                     if (isDiseaseHediff && Prefs.DevMode)
                     {
                         Log.Message($"[Riminder] Disease detected: {hediff.Label} on {pawn.LabelShort}");
                     }
-                    
-                    
+
+
                     bool hasExistingReminder = false;
                     var allReminders = RiminderManager.GetActiveReminders();
 
                     foreach (var reminder in allReminders.OfType<PawnTendReminder>())
                     {
                         if (reminder.pawnId != pawn.ThingID) continue;
-                        
-                        
-                        if (reminder.hediffLabel == hediff.def.label) 
+
+
+                        if (reminder.hediffLabel == hediff.def.label)
                         {
                             hasExistingReminder = true;
                             break;
                         }
-                        
-                        
-                        if (reminder.hediffId != null && hediff.def != null && 
-                            reminder.hediffId.Contains(hediff.def.defName)) 
+
+
+                        if (reminder.hediffId != null && hediff.def != null &&
+                            reminder.hediffId.Contains(hediff.def.defName))
                         {
                             hasExistingReminder = true;
                             break;
                         }
-                        
-                        
-                        if (hediff.loadID > 0 && reminder.hediffId == hediff.loadID.ToString()) 
+
+
+                        if (hediff.loadID > 0 && reminder.hediffId == hediff.loadID.ToString())
                         {
                             hasExistingReminder = true;
                             break;
                         }
                     }
 
-                    
+
                     if (!hasExistingReminder)
                     {
                         var reminder = new PawnTendReminder(
@@ -443,14 +462,14 @@ namespace Riminder
                             Log.Message($"[Riminder] Created tend reminder for {pawn.LabelShort}'s {hediff.Label}");
                         }
                     }
-                    
-                    
+
+
                     MarkAsProcessed(hediffKey);
-                    
-                    
+
+
                     RiminderManager.UpdateTendRemindersForPawn(pawn);
                 }
-                catch (Exception ex) 
+                catch (Exception ex)
                 {
                     if (Prefs.DevMode)
                     {
@@ -481,7 +500,7 @@ namespace Riminder
                     var remindersToRemove = RiminderManager.GetActiveReminders()
                         .OfType<PawnTendReminder>()
                         .Where(r => r.pawnId == pawn.ThingID &&
-                                   (r.hediffId == loadIdStr || 
+                                   (r.hediffId == loadIdStr ||
                                     r.hediffId == alternateId ||
                                     r.hediffId.Contains(hediff.def.defName) ||
                                     r.hediffLabel == hediff.def.label))
@@ -496,7 +515,7 @@ namespace Riminder
                             .OfType<PawnTendReminder>()
                             .Where(r => r.pawnId == pawn.ThingID)
                             .ToList();
-                        
+
                         remindersToRemove.AddRange(allPawnReminders);
                     }
 
@@ -505,10 +524,10 @@ namespace Riminder
                         RiminderManager.RemoveReminder(reminder.id);
                     }
 
-                    
+
                     RiminderManager.UpdateTendRemindersForPawn(pawn);
                 }
-                catch (Exception ex) 
+                catch (Exception ex)
                 {
                     if (Prefs.DevMode)
                     {
@@ -534,7 +553,7 @@ namespace Riminder
                     if (pawn == null || !pawn.IsColonist || hediff == null) return;
                     if (hediff.IsPermanent()) return;
 
-                    
+
                     RiminderManager.UpdateTendRemindersForPawn(pawn);
                 }
                 catch (Exception ex)
@@ -555,16 +574,16 @@ namespace Riminder
                 try
                 {
                     if (patient == null || !patient.IsColonist) return;
-                    
-                    
+
+
                     RiminderManager.UpdateTendRemindersForPawn(patient);
-                    
-                    
+
+
                     var reminders = RiminderManager.GetActiveReminders()
                         .OfType<PawnTendReminder>()
                         .Where(r => r.pawnId == patient.ThingID)
                         .ToList();
-                        
+
                     foreach (var reminder in reminders)
                     {
                         reminder.Trigger();
