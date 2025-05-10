@@ -317,8 +317,17 @@ namespace Riminder
                     }
                     else
                     {
-                        float hoursLeft = priority.TendComp.tendTicksLeft / (float)GenDate.TicksPerHour;
-                        desc += $"\nTended, next tend in {hoursLeft:F1}h.";
+                        // Calculate the actual time when the hediff can be tended again
+                        int nextTendableInTicks = priority.TendComp.tendTicksLeft - priority.TendComp.TProps.TendTicksOverlap;
+                        if (nextTendableInTicks <= 0)
+                        {
+                            desc += "\nTended, can be tended again now.";
+                        }
+                        else
+                        {
+                            float hoursUntilTendable = nextTendableInTicks / (float)GenDate.TicksPerHour;
+                            desc += $"\nTended, next tend in {hoursUntilTendable:F1}h.";
+                        }
                     }
                     tendReminder.description = desc;
                     tendReminder.hediffId = priority.Hediff.loadID > 0 ? priority.Hediff.loadID.ToString() : $"{pawn.ThingID}_{priority.Hediff.def.defName}";

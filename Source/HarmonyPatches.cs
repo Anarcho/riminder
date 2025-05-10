@@ -606,12 +606,12 @@ namespace Riminder
                         Log.Message($"[Riminder] DoTend performed on {patient.LabelShort}");
                     }
 
-                    
+                    // Get the tended hediffs to update their timers
                     var tendedHediffs = patient.health.hediffSet.hediffs
                         .Where(h => h is HediffWithComps hwc && hwc.TryGetComp<HediffComp_TendDuration>() != null)
                         .ToList();
 
-                    
+                    // Get all the tend reminders for this pawn
                     var reminders = RiminderManager.GetActiveReminders()
                         .OfType<PawnTendReminder>()
                         .Where(r => r.pawnId == patient.ThingID)
@@ -622,24 +622,63 @@ namespace Riminder
                         Log.Message($"[Riminder] Updating {reminders.Count} tend reminders for {patient.LabelShort}");
                     }
 
-                    
+                    // First update all reminders for timing consistency
                     foreach (var reminder in reminders)
                     {
-                        
+                        // Update hediff tracking to ensure we're monitoring all tendable conditions
                         reminder.RefreshTrackedHediffs(patient);
-
                         
-                        reminder.needsImmediateTending = false;
+                        // We need to check if there are any hediffs that still need tending
+                        bool stillNeedsTending = false;
+                        
+                        // Get the tracked hediffs for this reminder
+                        List<Hediff> trackedHediffs = reminder.GetTrackedHediffs(patient);
+                        
+                        // Check if any of them need tending
+                        foreach (var hediff in trackedHediffs)
+                        {
+                            if (hediff.TendableNow())
+                            {
+                                stillNeedsTending = true;
+                                break;
+                            }
+                            
+                            if (hediff is Hediff_Injury injury && injury.Bleeding)
+                            {
+                                stillNeedsTending = true;
+                                break;
+                            }
+                            
+                            if (hediff is HediffWithComps hwc)
+                            {
+                                var tendComp = hwc.TryGetComp<HediffComp_TendDuration>();
+                                if (tendComp != null && (!tendComp.IsTended || tendComp.tendTicksLeft <= 0))
+                                {
+                                    stillNeedsTending = true;
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        // Only set to false if we've confirmed nothing needs tending
+                        reminder.needsImmediateTending = stillNeedsTending;
+                        
+                        // Force recalculation of tend ticks
                         reminder.actualTendTicksLeft = -1;
-
                         
+                        // Make sure label and description are updated with fresh data
                         reminder.UpdateLabelAndDescription(patient);
-
                         
+                        // Trigger the reminder to update timers and alerts
                         reminder.Trigger();
+                        
+                        if (Prefs.DevMode)
+                        {
+                            Log.Message($"[Riminder] After DoTend for {patient.LabelShort}, needsImmediateTending={reminder.needsImmediateTending}");
+                        }
                     }
 
-                    
+                    // Finally, call this to ensure any existing reminders are consistent
                     RiminderManager.UpdateTendRemindersForPawn(patient);
                 }
                 catch (Exception ex)
@@ -653,3 +692,4 @@ namespace Riminder
         }
     }
 }
+
