@@ -13,6 +13,37 @@ namespace Riminder
         public bool removeOnImmunity;
         public string pawnLabel;
         public string hediffLabel;
+        private bool alerted = false;
+        public float tendProgress = 0f; 
+        public int totalTendDuration = -1; 
+
+        public class TrackedHediffInfo : IExposable
+        {
+            public long loadID;
+            public string defName;
+            public int? partIndex; 
+
+            
+            public TrackedHediffInfo()
+            {
+            }
+
+            public TrackedHediffInfo(long loadID, string defName, int? partIndex = null)
+            {
+                this.loadID = loadID;
+                this.defName = defName;
+                this.partIndex = partIndex;
+            }
+
+            public void ExposeData()
+            {
+                Scribe_Values.Look(ref loadID, "loadID");
+                Scribe_Values.Look(ref defName, "defName");
+                Scribe_Values.Look(ref partIndex, "partIndex");
+            }
+        }
+
+        public List<TrackedHediffInfo> trackedHediffs = new List<TrackedHediffInfo>();
 
         public PawnTendReminder() : base() { }
 
@@ -20,7 +51,6 @@ namespace Riminder
         {
             if (pawn == null)
             {
-                Log.Error("[Riminder] Attempted to create a PawnTendReminder with null pawn");
                 this.id = Guid.NewGuid().ToString();
                 this.label = "Invalid Reminder";
                 this.description = "This reminder was created incorrectly and should be deleted.";
@@ -28,125 +58,183 @@ namespace Riminder
                 this.triggerTick = Find.TickManager.TicksGame;
                 return;
             }
-
             this.pawnId = pawn.ThingID;
-            this.hediffId = hediff?.loadID > 0 ? hediff.loadID.ToString() : $"{pawn.ThingID}_{hediff?.def.defName}";
             this.removeOnImmunity = removeOnImmunity;
             this.pawnLabel = pawn.LabelShort;
-            this.hediffLabel = hediff?.def?.label ?? "Unknown";
-
-            UpdateLabelAndDescription(pawn);
-            
             this.frequency = ReminderFrequency.WhenTendingRequired;
             this.createdTick = Find.TickManager.TicksGame;
-            this.triggerTick = CalculateNextTendTick(pawn);
             this.id = Guid.NewGuid().ToString();
+            
+            this.trackedHediffs = pawn.health.hediffSet.hediffs
+                .Where(h => h is HediffWithComps hwc && hwc.TryGetComp<HediffComp_TendDuration>() != null)
+                .Select(h => new TrackedHediffInfo(h.loadID, h.def.defName, h.Part != null ? (int?)h.Part.Index : null))
+                .ToList();
+            
+            UpdateLabelAndDescription(pawn);
+            this.triggerTick = CalculateNextTendTick(pawn);
         }
 
-        public void UpdateLabelAndDescription(Pawn pawn)
-        {
-            var nextTendableHediff = GetNextTendableHediff(pawn);
-            if (nextTendableHediff != null)
-            {
-                hediffId = nextTendableHediff.loadID > 0 ? nextTendableHediff.loadID.ToString() : $"{pawn.ThingID}_{nextTendableHediff?.def.defName}";
-                hediffLabel = nextTendableHediff?.def?.label ?? "Unknown";
-                
-                this.label = $"Tend {pawnLabel}'s {hediffLabel}";
-            }
-            else
-            {
-                this.label = $"Tend {pawnLabel}";
-            }
-            this.description = GetTendDescription(pawn);
-
-            var openDialogs = Find.WindowStack?.Windows?.OfType<Dialog_ViewReminders>();
-            if (openDialogs != null && openDialogs.Any())
-            {
-                foreach (var dialog in openDialogs)
-                {
-                    dialog.RefreshAndRedraw();
-                }
-            }
-        }
-
-        private Hediff GetNextTendableHediff(Pawn pawn)
+        private Hediff GetMostUrgentTendableHediff(Pawn pawn)
         {
             if (pawn?.health?.hediffSet == null) return null;
-
             Hediff mostUrgent = null;
-            float mostUrgentPriority = float.MinValue;
-
+            int minTicksLeft = int.MaxValue;
+            
             foreach (var hediff in pawn.health.hediffSet.hediffs)
             {
-                if (!hediff.def.tendable || hediff.IsPermanent()) continue;
-
+                if (hediff.IsPermanent()) continue;
+                if (hediff is Hediff_Injury injury && injury.Bleeding && injury.TendableNow())
+                {
+                    return hediff; 
+                }
+            }
+            
+            foreach (var hediff in pawn.health.hediffSet.hediffs)
+            {
+                if (hediff.IsPermanent()) continue;
                 if (hediff is HediffWithComps hwc)
                 {
                     var tendComp = hwc.TryGetComp<HediffComp_TendDuration>();
                     if (tendComp == null) continue;
-
-                    float priority = CalculateHediffPriority(hediff);
-                    if (priority > mostUrgentPriority)
+                    if (tendComp.tendTicksLeft == -1)
                     {
-                        mostUrgentPriority = priority;
+                        
+                        if (mostUrgent == null) mostUrgent = hediff;
+                    }
+                    else if (tendComp.tendTicksLeft > 0 && tendComp.tendTicksLeft < minTicksLeft)
+                    {
+                        minTicksLeft = tendComp.tendTicksLeft;
                         mostUrgent = hediff;
                     }
                 }
             }
-
             return mostUrgent;
         }
 
-        private float CalculateHediffPriority(Hediff hediff)
+        public void UpdateLabelAndDescription(Pawn pawn)
         {
-            float priority = 0f;
-
-            if (hediff.CurStage?.lifeThreatening ?? false)
+            if (pawn == null || pawn.health == null || pawn.health.hediffSet == null)
             {
-                priority += 1000f;
+                this.label = "Invalid Pawn Data";
+                this.description = "Pawn or health data not found for this reminder.";
+                this.hediffId = null;
+                this.hediffLabel = "Unknown";
+                return;
+            }
+            this.pawnLabel = pawn.LabelShort;
+            var next = GetMostUrgentTendableHediff(pawn);
+            if (next != null)
+            {
+                this.hediffId = next.loadID > 0 ? next.loadID.ToString() : null;
+                this.hediffLabel = next.def?.label ?? "Unknown";
+                this.label = $"Tend {pawn.LabelShort}'s {next.Label}";
+            }
+            else
+            {
+                this.label = $"Monitor {pawn.LabelShort}";
+                this.hediffId = null;
+                this.hediffLabel = "None";
+            }
+            this.description = GetTendDescription(pawn);
+        }
 
-                if (hediff.def.lethalSeverity > 0)
+        private Hediff GetNextTendableHediff(Pawn pawn)
+        {
+            
+            return GetMostUrgentTendableHediff(pawn);
+        }
+
+        private static int CalculateNextTendTick(Pawn pawn)
+        {
+            int currentTick = Find.TickManager.TicksGame;
+            int soonestTendTick = currentTick + GenDate.TicksPerDay; 
+            bool needsTendingNow = false;
+            
+            
+            foreach (var hediff in pawn.health.hediffSet.hediffs)
+            {
+                if (!hediff.def.tendable || hediff.IsPermanent()) continue;
+                
+                if (hediff is HediffWithComps hwc)
                 {
-                    var severityComp = hediff.TryGetComp<HediffComp_SeverityPerDay>();
-                    if (severityComp != null)
+                    var tendComp = hwc.TryGetComp<HediffComp_TendDuration>();
+                    if (tendComp == null) continue;
+                    
+                    
+                    if (!tendComp.IsTended || tendComp.tendTicksLeft == -1)
                     {
-                        float severityPerHour = severityComp.SeverityChangePerDay() / 24f;
-                        if (severityPerHour > 0)
+                        needsTendingNow = true;
+                        
+                        
+                    }
+                    else if (tendComp.tendTicksLeft > 0)
+                    {
+                        
+                        
+                        soonestTendTick = Math.Min(soonestTendTick, currentTick + tendComp.tendTicksLeft);
+                    }
+                }
+            }
+            
+            
+            return needsTendingNow ? currentTick : soonestTendTick;
+        }
+
+        private static string GetTendDescription(Pawn pawn)
+        {
+            if (pawn == null) return "Invalid pawn";
+            var hediffs = new List<Hediff>();
+            TendUtility.GetOptimalHediffsToTendWithSingleTreatment(pawn, false, hediffs);
+            if (!hediffs.Any())
+                return $"No conditions currently require tending for {pawn.LabelShort}.";
+            var desc = $"Tending status for {pawn.LabelShort}:";
+            foreach (var h in hediffs)
+            {
+                desc += $"\n- {h.Label}";
+                if (h is HediffWithComps hwc)
+                {
+                    var tendComp = hwc.TryGetComp<HediffComp_TendDuration>();
+                    if (tendComp != null)
+                    {
+                        if (tendComp.IsTended)
                         {
-                            float hoursUntilDeath = (hediff.def.lethalSeverity - hediff.Severity) / severityPerHour;
-                            priority += 1000f / Math.Max(1f, hoursUntilDeath); 
+                            float hoursLeft = tendComp.tendTicksLeft / (float)GenDate.TicksPerHour;
+                            desc += $" (Tended {tendComp.tendQuality:P0}, {hoursLeft:F1}h left)";
+                        }
+                        else
+                        {
+                            desc += " (Needs tending)";
                         }
                     }
+                    
+                    var imm = hwc.TryGetComp<HediffComp_Immunizable>();
+                    if (imm != null)
+                    {
+                        desc += $"\n<color=#FFFF00>Immunity: {imm.Immunity:P0}";
+                        if (imm.Immunity >= 0.8f)
+                            desc += " (Almost immune)";
+                        else if (imm.Immunity >= 0.5f)
+                            desc += " (Good progress)";
+                        desc += "</color>";
+                    }
                 }
-            }
-
-            if (hediff is Hediff_Injury injury && injury.Bleeding)
-            {
-                priority += 500f;
-            }
-
-            if (hediff is HediffWithComps hwc)
-            {
-                var tendComp = hwc.TryGetComp<HediffComp_TendDuration>();
-                if (tendComp != null)
+                
+                if (h is Hediff_Injury injury && injury.Bleeding)
                 {
-                    if (!tendComp.IsTended)
+                    int ticksUntilDeath = HealthUtility.TicksUntilDeathDueToBloodLoss(pawn);
+                    if (ticksUntilDeath < int.MaxValue)
                     {
-                        priority += 100f;
-                    }
-                    else
-                    {
-                        priority += (1f - tendComp.tendQuality) * 50f;
-                        
-                        float hoursLeft = tendComp.tendTicksLeft / (float)GenDate.TicksPerHour;
-                        priority += 50f / Math.Max(1f, hoursLeft);
+                        float hoursUntilDeath = ticksUntilDeath / (float)GenDate.TicksPerHour;
+                        string deathStr = hoursUntilDeath < 1f
+                            ? $"{hoursUntilDeath * 60f:F0} minutes"
+                            : hoursUntilDeath < 24f
+                                ? $"{hoursUntilDeath:F1} hours"
+                                : $"{hoursUntilDeath / 24f:F1} days";
+                        desc += $"\n<color=#FF4444>Death from blood loss in {deathStr}</color>";
                     }
                 }
             }
-
-            priority += hediff.Severity;
-
-            return priority;
+            return desc;
         }
 
         public override void ExposeData()
@@ -154,466 +242,157 @@ namespace Riminder
             base.ExposeData();
             Scribe_Values.Look(ref pawnId, "pawnId");
             Scribe_Values.Look(ref hediffId, "hediffId");
-            Scribe_Values.Look(ref alerted, "alerted", false);
-            Scribe_Values.Look(ref lastTendQuality, "lastTendQuality", 0f);
-            Scribe_Values.Look(ref lastMaxTendTicks, "lastMaxTendTicks", 0f);
             Scribe_Values.Look(ref removeOnImmunity, "removeOnImmunity", false);
+            Scribe_Values.Look(ref alerted, "alerted", false);
+            Scribe_Values.Look(ref totalTendDuration, "totalTendDuration", -1);
+            Scribe_Values.Look(ref pawnLabel, "pawnLabel");
+            Scribe_Values.Look(ref hediffLabel, "hediffLabel");
+            Scribe_Values.Look(ref tendProgress, "tendProgress", 0f);
+            Scribe_Collections.Look(ref trackedHediffs, "trackedHediffs", LookMode.Deep);
+            
+            if (Scribe.mode == LoadSaveMode.LoadingVars && trackedHediffs == null)
+            {
+                trackedHediffs = new List<TrackedHediffInfo>();
+            }
         }
 
         public override void Trigger()
         {
-            try
+            Pawn pawn = FindPawn();
+            if (pawn == null || pawn.health == null || pawn.health.hediffSet == null)
             {
-                Pawn pawn = FindPawn();
-                if (pawn == null)
+                if (Prefs.DevMode)
+                    Log.Warning($"[Riminder] Completing reminder {id} because pawn or health/hediffSet is null. PawnId: {pawnId}");
+                completed = true;
+                return;
+            }
+            
+            RefreshTrackedHediffs(pawn);
+            UpdateLabelAndDescription(pawn);
+            var next = FindHediff(pawn);
+            if (next == null)
+            {
+                if (Prefs.DevMode)
+                    Log.Warning($"[Riminder] No tendable hediff found for pawn {pawn.LabelShort} ({pawnId}) in reminder {id}. Reminder will NOT be completed here, just not alerted.");
+            }
+            
+            if (next != null && next.TendableNow())
+            {
+                if (!alerted)
                 {
-                    completed = true;
-                    return;
-                }
-
-                UpdateLabelAndDescription(pawn);
-
-                bool anyNeedTending = false;
-                bool allHealed = true;
-                bool allImmune = true;
-
-                List<Hediff> immuneHediffs = new List<Hediff>();
-
-                foreach (var hediff in pawn.health.hediffSet.hediffs)
-                {
-                    if (!hediff.def.tendable || hediff.IsPermanent()) continue;
-
-                    if (hediff is HediffWithComps hwc)
-                    {
-                        var tendComp = hwc.TryGetComp<HediffComp_TendDuration>();
-                        if (tendComp == null) continue;
-
-                        allHealed = false;
-
-                        var immunityComp = hwc.TryGetComp<HediffComp_Immunizable>();
-                        if (immunityComp != null)
-                        {
-                            if (immunityComp.Immunity >= 1f)
-                            {
-                                if (removeOnImmunity)
-                                {
-                                    immuneHediffs.Add(hediff);
-                                    continue;
-                                }
-                            }
-                            else
-                            {
-                                allImmune = false;
-                            }
-                        }
-                        else
-                        {
-                            allImmune = false;
-                        }
-
-                        if (!tendComp.IsTended)
-                        {
-                            anyNeedTending = true;
-                        }
-                    }
-                }
-
-                if (allHealed || (allImmune && removeOnImmunity))
-                {
-                    description = GetTendDescription(pawn);
-                    triggerTick = CalculateNextTendTick(pawn);
-                    alerted = false; 
-                    return;
-                }
-
-                int nextTendTick = CalculateNextTendTick(pawn);
-
-                if (anyNeedTending && !alerted)
-                {
+                    if (Prefs.DevMode)
+                        Log.Message($"[Riminder] Triggering tend reminder for {pawn.LabelShort} ({pawnId}) for hediff {next.Label}.");
                     Find.LetterStack.ReceiveLetter(
                         "Tend Reminder: " + pawn.LabelShort,
                         GetTendDescription(pawn),
                         LetterDefOf.NeutralEvent,
                         new LookTargets(pawn));
-
                     if (RiminderMod.Settings.pauseOnReminder)
-                    {
                         Find.TickManager.Pause();
-                    }
-
                     alerted = true;
-                    triggerTick = Find.TickManager.TicksGame + GenDate.TicksPerHour; 
-                    return;
-                }
-
-                description = GetTendDescription(pawn);
-                
-                if (alerted)
-                {
-                    if (nextTendTick > Find.TickManager.TicksGame + (GenDate.TicksPerHour * 2))
-                    {
-                        alerted = false;
-                        triggerTick = nextTendTick;
-                    }
-                    else
-                    {
-                        triggerTick = Math.Min(nextTendTick, Find.TickManager.TicksGame + GenDate.TicksPerHour);
-                    }
-                }
-                else
-                {
-                    triggerTick = nextTendTick;
                 }
             }
-            catch (Exception ex) 
+            else
             {
-                if (Prefs.DevMode)
-                {
-                    Log.Error($"[Riminder] Error in PawnTendReminder.Trigger: {ex}");
-                }
+                
+                if (alerted && Prefs.DevMode)
+                    Log.Message($"[Riminder] Resetting alert for {pawn.LabelShort} ({pawnId}) in reminder {id}.");
+                alerted = false;
             }
+            
+            this.triggerTick = CalculateNextTendTick(pawn);
+        }
+
+        
+        public List<Hediff> GetTrackedHediffs(Pawn pawn)
+        {
+            if (pawn == null || trackedHediffs == null) return new List<Hediff>();
+            var hediffs = new List<Hediff>();
+            foreach (var info in trackedHediffs.ToList())
+            {
+                var found = pawn.health.hediffSet.hediffs.FirstOrDefault(h =>
+                    h.loadID == info.loadID ||
+                    (h.def.defName == info.defName && (info.partIndex == null || (h.Part != null && h.Part.Index == info.partIndex))));
+                if (found != null)
+                    hediffs.Add(found);
+                else
+                    trackedHediffs.Remove(info); 
+            }
+            return hediffs;
+        }
+
+        
+        public Hediff FindHediff(Pawn pawn)
+        {
+            var tracked = GetTrackedHediffs(pawn);
+            if (tracked.Count == 0) return null;
+            
+            var bleeding = tracked.FirstOrDefault(h => h is Hediff_Injury inj && inj.Bleeding && inj.TendableNow());
+            if (bleeding != null) return bleeding;
+            return tracked.OrderBy(h =>
+                h is HediffWithComps hwc && hwc.TryGetComp<HediffComp_TendDuration>() != null ?
+                    (hwc.TryGetComp<HediffComp_TendDuration>().tendTicksLeft == -1 ? int.MinValue : hwc.TryGetComp<HediffComp_TendDuration>().tendTicksLeft)
+                    : int.MaxValue).First();
         }
 
         public Pawn FindPawn()
         {
-            return Find.CurrentMap?.mapPawns?.AllPawns
-                .FirstOrDefault(p => p.ThingID == pawnId);
+            return Find.CurrentMap?.mapPawns?.AllPawns.FirstOrDefault(p => p.ThingID == pawnId);
         }
 
-        public Hediff FindHediff(Pawn pawn)
+        
+        public override string GetTimeLeftString()
         {
-            if (pawn == null) return null;
-
-            if (long.TryParse(hediffId, out long loadID) && loadID != 0)
+            Pawn pawn = FindPawn();
+            if (pawn == null) return base.GetTimeLeftString();
+            
+            var next = FindHediff(pawn);
+            if (next == null) return "No injuries";
+            
+            
+            if (next is HediffWithComps hwc)
             {
-                Hediff byLoadId = pawn.health.hediffSet.hediffs
-                    .FirstOrDefault(h => h.loadID == loadID);
-                if (byLoadId != null) return byLoadId;
-            }
-
-            string[] parts = hediffId.Split('_');
-            if (parts.Length == 2)
-            {
-                string defName = parts[1];
-                var matchingHediffs = pawn.health.hediffSet.hediffs
-                    .Where(h => h.def.defName == defName)
-                    .ToList();
-                if (matchingHediffs.Count > 0)
+                var tendComp = hwc.TryGetComp<HediffComp_TendDuration>();
+                if (tendComp != null)
                 {
-                    return matchingHediffs.FirstOrDefault();
-                }
-            }
-
-            if (!string.IsNullOrEmpty(hediffLabel))
-            {
-                var byExactLabel = pawn.health.hediffSet.hediffs
-                    .FirstOrDefault(h => h.def.label == hediffLabel);
-                if (byExactLabel != null) return byExactLabel;
-
-                var byCaseInsensitiveLabel = pawn.health.hediffSet.hediffs
-                    .FirstOrDefault(h => h.def.label.ToLower() == hediffLabel.ToLower());
-                if (byCaseInsensitiveLabel != null) return byCaseInsensitiveLabel;
-
-                var byPartialLabel = pawn.health.hediffSet.hediffs
-                    .FirstOrDefault(h => h.def.label.ToLower().Contains(hediffLabel.ToLower()) ||
-                                        hediffLabel.ToLower().Contains(h.def.label.ToLower()));
-                if (byPartialLabel != null) return byPartialLabel;
-            }
-
-            foreach (var hediff in pawn.health.hediffSet.hediffs)
-            {
-                if (hediffId.Contains(hediff.def.defName) ||
-                    hediff.def.defName.Contains(hediffLabel))
-                {
-                    return hediff;
-                }
-            }
-
-            return null;
-        }
-
-        private static string GetTendDescription(Pawn pawn)
-        {
-            string desc = $"Tending required for {pawn.LabelShort}:";
-            bool foundTendable = false;
-
-            foreach (var hediff in pawn.health.hediffSet.hediffs)
-            {
-                if (!hediff.def.tendable || hediff.IsPermanent()) continue;
-
-                if (hediff is HediffWithComps hwc)
-                {
-                    var tendComp = hwc.TryGetComp<HediffComp_TendDuration>();
-                    if (tendComp == null) continue;
-
-                    foundTendable = true;
-                    desc += $"\n- {hediff.Label} ({hediff.def.label})";
+                    if (!tendComp.IsTended || tendComp.tendTicksLeft == -1)
+                        return "Now";
+                        
                     
-                    var immunityComp = hwc.TryGetComp<HediffComp_Immunizable>();
-                    if (immunityComp != null)
-                    {
-                        desc += $" - Immunity: {immunityComp.Immunity:P0}";
-                    }
+                    float hoursLeft = tendComp.tendTicksLeft / (float)GenDate.TicksPerHour;
                     
-                    if (hediff.CurStage != null && hediff.CurStage.lifeThreatening && hediff.def.lethalSeverity > 0)
-                    {
-                        float severityPerHour = 0f;
-                        HediffComp_SeverityPerDay severityComp = hediff.TryGetComp<HediffComp_SeverityPerDay>();
-                        if (severityComp != null)
-                        {
-                            severityPerHour = severityComp.SeverityChangePerDay() / 24f;
-                            if (severityPerHour > 0)
-                            {
-                                float hoursUntilDeath = (hediff.def.lethalSeverity - hediff.Severity) / severityPerHour;
-                                if (hoursUntilDeath > 0)
-                                {
-                                    if (immunityComp != null)
-                                    {
-                                        float immunityGrowthPerDay = 0.4f * tendComp.tendQuality;  
-                                        float daysUntilImmune = (1f - immunityComp.Immunity) / immunityGrowthPerDay;
-                                        
-                                        bool immunityWillBeatDisease = daysUntilImmune * 24 < hoursUntilDeath;
-                                        desc += immunityWillBeatDisease ? " (Will recover)" : " (Critical case)";
-                                    }
-                                    
-                                    if (hoursUntilDeath > 24)
-                                    {
-                                        desc += $" (Lethal in: {hoursUntilDeath/24f:F1} days)";
-                                    }
-                                    else
-                                    {
-                                        desc += $" (Lethal in: {hoursUntilDeath:F1} hours)";
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    if (tendComp.IsTended)
-                    {
-                        desc += $" - Quality: {tendComp.tendQuality:P0}";
-                        float hoursLeft = tendComp.tendTicksLeft / (float)GenDate.TicksPerHour;
-                        if (hoursLeft > 0)
-                        {
-                            desc += $", next tend in {hoursLeft:F1}h";
-                        }
-                        else
-                        {
-                            desc += ", needs tending now";
-                        }
-                    }
-                    else
-                    {
-                        desc += " - Needs tending now!";
-                    }
+                    if (hoursLeft < 1f)
+                        return $"in {(hoursLeft * 60f):F0} minutes";
+                        
+                    return $"in {hoursLeft:F1} hours";
                 }
             }
-
-            if (!foundTendable)
-            {
-                desc += "\nNo conditions currently require tending.";
-            }
-
-            return desc;
+            
+            
+            return base.GetTimeLeftString();
         }
 
-        private static int CalculateNextTendTick(Pawn pawn)
+        
+        public void RefreshTrackedHediffs(Pawn pawn)
         {
-            int currentTick = Find.TickManager.TicksGame;
-            int soonestTendTick = currentTick + GenDate.TicksPerDay; 
-
-            foreach (var hediff in pawn.health.hediffSet.hediffs)
+            if (pawn == null || pawn.health == null || pawn.health.hediffSet == null) return;
+            var current = new HashSet<string>(trackedHediffs.Select(t => $"{t.loadID}_{t.defName}_{t.partIndex}"));
+            foreach (var h in pawn.health.hediffSet.hediffs)
             {
-                if (!hediff.def.tendable || hediff.IsPermanent()) continue;
-
-                if (hediff is HediffWithComps hwc)
+                if (h is HediffWithComps hwc && hwc.TryGetComp<HediffComp_TendDuration>() != null)
                 {
-                    var tendComp = hwc.TryGetComp<HediffComp_TendDuration>();
-                    if (tendComp == null) continue;
-
-                    if (!tendComp.IsTended)
+                    string key = $"{h.loadID}_{h.def.defName}_{(h.Part != null ? h.Part.Index.ToString() : "")}";
+                    if (!current.Contains(key))
                     {
-                        return currentTick;
+                        trackedHediffs.Add(new TrackedHediffInfo(h.loadID, h.def.defName, h.Part != null ? (int?)h.Part.Index : null));
                     }
-
-                    soonestTendTick = Math.Min(soonestTendTick, currentTick + tendComp.tendTicksLeft);
                 }
             }
-
-            return soonestTendTick;
         }
 
         public override void OpenEditDialog()
         {
             Find.WindowStack.Add(new Dialog_EditTendReminder(this));
         }
-
-        public override float GetProgressPercent()
-        {
-            Pawn pawn = FindPawn();
-            if (pawn == null) return 1f;
-
-            foreach (var hediff in pawn.health.hediffSet.hediffs)
-            {
-                if (!hediff.def.tendable || hediff.IsPermanent()) continue;
-
-                if (hediff is HediffWithComps hwc)
-                {
-                    var tendComp = hwc.TryGetComp<HediffComp_TendDuration>();
-                    if (tendComp != null)
-                    {
-                        if (!tendComp.IsTended || tendComp.tendTicksLeft <= 0)
-                        {
-                            return 1f;
-                        }
-                    }
-                }
-            }
-
-            float totalProgress = 0f;
-            int tendableCount = 0;
-            float maxProgress = 0f;
-
-            foreach (var hediff in pawn.health.hediffSet.hediffs)
-            {
-                if (!hediff.def.tendable || hediff.IsPermanent()) continue;
-
-                if (hediff is HediffWithComps hediffWithComps)
-                {
-                    var tendComp = hediffWithComps.TryGetComp<HediffComp_TendDuration>();
-                    if (tendComp != null)
-                    {
-                        if (tendComp.IsTended)
-                        {
-                            if (tendComp.tendTicksLeft > 0 && lastMaxTendTicks <= 0f)
-                            {
-                                lastMaxTendTicks = GenDate.TicksPerDay;
-                            }
-
-                            if (lastMaxTendTicks > 0f)
-                            {
-                                float remainingDuration = tendComp.tendTicksLeft;
-                                float tendProgress = 1f - (remainingDuration / lastMaxTendTicks);
-                                
-                                tendProgress = Math.Max(0f, Math.Min(1f, tendProgress));
-                                
-                                totalProgress += tendProgress;
-                                maxProgress = Math.Max(maxProgress, tendProgress);
-                            }
-                            tendableCount++;
-                        }
-                    }
-
-                    var immunityComp = hediffWithComps.TryGetComp<HediffComp_Immunizable>();
-                    if (immunityComp != null)
-                    {
-                        totalProgress += immunityComp.Immunity;
-                        maxProgress = Math.Max(maxProgress, immunityComp.Immunity);
-                        tendableCount++;
-                    }
-                }
-
-                if (hediff is Hediff_Injury injury && !injury.IsPermanent())
-                {
-                    float progress = 1f - injury.Severity / injury.def.initialSeverity;
-                    totalProgress += progress;
-                    maxProgress = Math.Max(maxProgress, progress);
-                    tendableCount++;
-                }
-            }
-
-            return tendableCount > 0 ? maxProgress : 1f;
-        }
-
-        public string GetTimeUntilDeathInfo()
-        {
-            try
-            {
-                Pawn pawn = FindPawn();
-                if (pawn == null || pawn.health == null || pawn.health.hediffSet == null)
-                    return null;
-
-                float bleedRate = pawn.health.hediffSet.BleedRateTotal;
-                
-                if (bleedRate > 0.01f)
-                {
-                    int ticksUntilDeath = HealthUtility.TicksUntilDeathDueToBloodLoss(pawn);
-                    
-                    if (ticksUntilDeath < int.MaxValue)
-                    {
-                        float hoursUntilDeath = ticksUntilDeath / (float)GenDate.TicksPerHour;
-                        
-                        if (hoursUntilDeath < 1f)
-                        {
-                            float minutesUntilDeath = hoursUntilDeath * 60f;
-                            return $"Death from blood loss in {minutesUntilDeath:F0} minutes";
-                        }
-                        else if (hoursUntilDeath < 24f)
-                        {
-                            return $"Death from blood loss in {hoursUntilDeath:F1} hours";
-                        }
-                        else
-                        {
-                            return $"Death from blood loss in {hoursUntilDeath / 24f:F1} days";
-                        }
-                    }
-                    else if (bleedRate > 0.1f)
-                    {
-                        return "Heavy bleeding - blood loss beginning";
-                    }
-                    else if (bleedRate > 0.05f)
-                    {
-                        return "Moderate bleeding";
-                    }
-                    else
-                    {
-                        return "Minor bleeding";
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                if (Prefs.DevMode)
-                {
-                    Log.Error($"[Riminder] Error calculating bleeding death time: {ex}");
-                }
-            }
-            
-            return null;
-        }
-
-        private float CalculateImmunityGainPerDay(Pawn pawn, HediffWithComps disease)
-        {
-            if (pawn == null || disease == null) return 0f;
-            
-            var immunizableComp = disease.TryGetComp<HediffComp_Immunizable>();
-            if (immunizableComp == null) return 0f;
-            
-            HediffCompProperties_Immunizable props = disease.def.CompProps<HediffCompProperties_Immunizable>();
-            if (props == null) return 0f;
-            
-            float immunityPerDaySick = props.immunityPerDaySick;
-            
-            immunityPerDaySick *= pawn.GetStatValue(StatDefOf.ImmunityGainSpeed);
-            
-            float randomFactor = 1.0f;
-            try
-            {
-                Rand.PushState();
-                Rand.Seed = Gen.HashCombineInt(disease.loadID ^ Find.World.info.persistentRandomValue, 156482735);
-                randomFactor = Rand.Range(0.8f, 1.2f);
-                Rand.PopState();
-            }
-            catch
-            {
-                randomFactor = 1.0f;
-            }
-            
-            return immunityPerDaySick * randomFactor;
-        }
-
-        private bool alerted = false;
-        private float lastTendQuality = 0f;
-        private float lastMaxTendTicks = 0f;
     }
 }

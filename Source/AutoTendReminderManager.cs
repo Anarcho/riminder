@@ -56,10 +56,35 @@ namespace Riminder
 
         private bool NeedsTending(Hediff hediff)
         {
+            
             if (hediff.IsPermanent()) return false;
 
-            if (hediff.def.defName.Contains("Removed") || hediff.Label.Contains("removed")) return false;
+            
+            if (hediff.def.defName.Contains("Removed") || 
+                hediff.Label.Contains("removed") || 
+                hediff.def.defName.Contains("Missing") || 
+                hediff.Label.Contains("missing")) return false;
+            
+            
+            if (hediff.Part != null && hediff.Part.def.tags.Contains(BodyPartTagDefOf.ConsciousnessSource)) return false;
+            
+            
+            if (hediff.Part != null)
+            {
+                foreach (Hediff h in hediff.pawn.health.hediffSet.hediffs)
+                {
+                    if ((h.def.defName.Contains("Missing") || h.def.defName.Contains("Removed")) && 
+                        h.Part == hediff.Part)
+                    {
+                        return false;
+                    }
+                }
+            }
 
+            
+            if (hediff.def.chronic) return false;
+
+            
             if (hediff is HediffWithComps hediffWithComps)
             {
                 foreach (HediffComp comp in hediffWithComps.comps)
@@ -114,4 +139,4 @@ namespace Riminder
             Scribe_Collections.Look(ref processedHediffs, "processedHediffs", LookMode.Value);
         }
     }
-} 
+}

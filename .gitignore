@@ -8,6 +8,7 @@
 Library/
 Temp/
 /Source/obj
+/Source/bin
 Build/
 Builds/
 .vscode/

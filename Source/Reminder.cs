@@ -105,7 +105,7 @@ namespace Riminder
             return (float)(currentTick - createdTick) / (triggerTick - createdTick);
         }
 
-        public string GetTimeLeftString()
+        public virtual string GetTimeLeftString()
         {
             int ticksLeft = triggerTick - Find.TickManager.TicksGame;
             if (ticksLeft <= 0) return "Now";

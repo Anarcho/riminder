@@ -52,7 +52,7 @@ namespace Riminder
 
                 int currentTick = Find.TickManager.TicksGame;
 
-                bool shouldRefreshDescriptions = currentTick % 60 == 0;
+                if (currentTick % 300 != 0) return;
 
                 for (int i = reminders.Count - 1; i >= 0; i--)
                 {
@@ -71,18 +71,19 @@ namespace Riminder
                             continue;
                         }
 
-                        if (shouldRefreshDescriptions && reminder is PawnTendReminder tendReminder)
-                        {
-                            Pawn pawn = tendReminder.FindPawn();
-                            if (pawn != null)
-                            {
-                                tendReminder.UpdateLabelAndDescription(pawn);
-                            }
-                        }
-
                         if (currentTick >= reminder.triggerTick)
                         {
-                            reminder.Trigger();
+                            try
+                            {
+                                reminder.Trigger();
+                            }
+                            catch (Exception ex)
+                            {
+                                if (Prefs.DevMode)
+                                {
+                                    Log.Error($"[Riminder] Error triggering reminder: {ex}");
+                                }
+                            }
 
                             if (reminder.completed)
                             {
@@ -102,25 +103,6 @@ namespace Riminder
                             reminders.RemoveAt(i);
                         }
                     }
-                }
-
-                if (shouldRefreshDescriptions)
-                {
-                    try
-                    {
-                        var openDialogs = Find.WindowStack?.Windows?.OfType<Dialog_ViewReminders>().ToList();
-                        if (openDialogs != null && openDialogs.Any())
-                        {
-                            foreach (var dialog in openDialogs)
-                            {
-                                if (dialog != null)
-                                {
-                                    dialog.RefreshAndRedraw();
-                                }
-                            }
-                        }
-                    }
-                    catch (Exception) { }
                 }
             }
             catch (Exception ex)
@@ -270,7 +252,7 @@ namespace Riminder
         }
 
         public static void RemoveReminder(string id)
-        {
+         {
             try
             {
                 if (instance == null) return;
@@ -339,6 +321,56 @@ namespace Riminder
             {
                 Log.Error($"[Riminder] Error in ExposeData: {ex}");
                 reminders = new List<Reminder>();
+            }
+        }
+
+        public static void UpdateTendRemindersForPawn(Pawn pawn)
+        {
+            if (instance == null || instance.reminders == null || pawn == null || !pawn.IsColonist) 
+                return;
+
+            try 
+            {
+                var tendReminders = instance.reminders
+                    .Where(r => r != null && !r.completed && !r.dismissed && r is PawnTendReminder)
+                    .Cast<PawnTendReminder>()
+                    .Where(tr => tr.pawnId == pawn.ThingID)
+                    .ToList();
+
+                foreach (var reminder in tendReminders)
+                {
+                    reminder.UpdateLabelAndDescription(pawn);
+                }
+
+                RefreshOpenDialogs();
+            }
+            catch (Exception ex)
+            {
+                if (Prefs.DevMode)
+                    Log.Error($"[Riminder] Error updating tend reminders for pawn {pawn.LabelShort}: {ex}");
+            }
+        }
+
+        public static void RefreshOpenDialogs()
+        {
+            try
+            {
+                var openDialogs = Find.WindowStack?.Windows?.OfType<Dialog_ViewReminders>().ToList();
+                if (openDialogs != null && openDialogs.Count > 0)
+                {
+                    foreach (var dialog in openDialogs)
+                    {
+                        if (dialog != null)
+                        {
+                            dialog.RefreshAndRedraw();
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                if (Prefs.DevMode)
+                    Log.Error($"[Riminder] Error refreshing dialogs: {ex}");
             }
         }
     }
