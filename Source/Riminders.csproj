@@ -7,7 +7,7 @@
     <ProjectGuid>{40F3D711-53E0-4D49-AC43-4A30B909F7F4}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>Riminders</RootNamespace>
+    <RootNamespace>Riminder</RootNamespace>
     <AssemblyName>Riminders</AssemblyName>
     <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
@@ -41,21 +41,41 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Alert_Reminder.cs" />
-    <Compile Include="AutoTendReminderManager.cs" />
-    <Compile Include="Dialog_CreateReminder.cs" />
-    <Compile Include="Dialog_CreateTendReminder.cs" />
-    <Compile Include="Dialog_EditReminder.cs" />
-    <Compile Include="Dialog_EditTendReminder.cs" />
-    <Compile Include="Dialog_ViewReminders.cs" />
-    <Compile Include="HarmonyPatches.cs" />
-    <Compile Include="MainButtonWorker_Riminder.cs" />
-    <Compile Include="PawnTendReminder.cs" />
+    <!-- Core -->
+    <Compile Include="Core\Alert_Reminder.cs" />
+    <Compile Include="Core\AutoTendReminderManager.cs" />
+    <Compile Include="Core\HarmonyPatches.cs" />
+    <Compile Include="Core\MainButtonWorker_Riminder.cs" />
+    <Compile Include="Core\RiminderManager.cs" />
+    <Compile Include="Core\RiminderMod.cs" />
+    <Compile Include="Core\RiminderSettings.cs" />
+    
+    <!-- Defs -->
+    <Compile Include="Defs\ReminderDef.cs" />
+    <Compile Include="Defs\ReminderDefOf.cs" />
+    
+    <!-- DataProviders -->
+    <Compile Include="DataProviders\IReminderDataProvider.cs" />
+    <Compile Include="DataProviders\TendReminderDataProvider.cs" />
+    
+    <!-- Reminders -->
+    <Compile Include="Reminders\BaseReminder.cs" />
+    <Compile Include="Reminders\NewPawnTendReminder.cs" />
+    <Compile Include="Reminders\PawnTendReminder.cs" />
+    <Compile Include="Reminders\Reminder.cs" />
+    
+    <!-- UI -->
+    <Compile Include="UI\Dialog_CreateReminder.cs" />
+    <Compile Include="UI\Dialog_CreateTendReminder.cs" />
+    <Compile Include="UI\Dialog_EditReminder.cs" />
+    <Compile Include="UI\Dialog_EditTendReminder.cs" />
+    <Compile Include="UI\Dialog_ViewReminders.cs" />
+    
+    <!-- Utils -->
+    <Compile Include="Utils\ReminderFactory.cs" />
+    
+    <!-- Properties -->
     <Compile Include="Properties\AssemblyInfo1.cs" />
-    <Compile Include="Reminder.cs" />
-    <Compile Include="RiminderManager.cs" />
-    <Compile Include="RiminderMod.cs" />
-    <Compile Include="RiminderSettings.cs" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Krafs.Rimworld.Ref">
