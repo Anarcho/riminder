@@ -60,8 +60,7 @@
     
     <!-- Reminders -->
     <Compile Include="Reminders\BaseReminder.cs" />
-    <Compile Include="Reminders\NewPawnTendReminder.cs" />
-    <Compile Include="Reminders\PawnTendReminder.cs" />
+    <Compile Include="Reminders\TendReminder.cs" />
     <Compile Include="Reminders\Reminder.cs" />
     
     <!-- UI -->
