@@ -199,10 +199,10 @@ namespace Riminder
             var reminder = new PawnTendReminder(pawn, selectedHediff, removeOnImmunity);
             RiminderManager.AddReminder(reminder);
 
-            // Force update all reminders for this pawn to ensure consistency
+            
             RiminderManager.UpdateTendRemindersForPawn(pawn);
 
-            // Trigger the reminder immediately to ensure UI updates properly
+            
             reminder.Trigger();
 
             Messages.Message($"Created tend reminder for {pawn.LabelShort}'s {selectedHediff.Label}", MessageTypeDefOf.TaskCompletion, false);

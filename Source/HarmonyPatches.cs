@@ -138,6 +138,10 @@ namespace Riminder
         [HarmonyPatch(typeof(HediffComp_TendDuration), "CompPostTick")]
         public static class HediffComp_TendDuration_CompPostTick_Patch
         {
+            
+            private static Dictionary<string, int> lastUpdateTicks = new Dictionary<string, int>();
+            private static readonly int MIN_UPDATE_INTERVAL = 60; 
+
             public static void Postfix(HediffComp_TendDuration __instance)
             {
                 try
@@ -146,6 +150,17 @@ namespace Riminder
                     if (__instance.parent == null) return;
 
                     string pawnId = __instance.Pawn.ThingID;
+
+                    
+                    int currentTick = Find.TickManager.TicksGame;
+                    if (lastUpdateTicks.TryGetValue(pawnId, out int lastUpdate))
+                    {
+                        if (currentTick - lastUpdate < MIN_UPDATE_INTERVAL)
+                        {
+                            return; 
+                        }
+                    }
+
                     var tendReminders = RiminderManager.GetActiveReminders()
                         ?.OfType<PawnTendReminder>()
                         ?.Where(r => r?.pawnId == pawnId)
@@ -153,14 +168,14 @@ namespace Riminder
 
                     if (tendReminders == null || !tendReminders.Any()) return;
 
-                    // Update reminders more frequently for infected/disease hediffs
+                    
                     bool isDisease = __instance.parent?.def?.HasComp(typeof(HediffComp_Immunizable)) == true
                         || __instance.parent is HediffWithComps hwc && hwc.TryGetComp<HediffComp_Immunizable>() != null;
 
                     bool isUrgent = __instance.tendTicksLeft <= GenDate.TicksPerHour || !__instance.IsTended;
 
-                    // Check more frequently for diseases and if tend time is low
-                    int checkInterval = isDisease || isUrgent ? 30 : 120;
+                    
+                    int checkInterval = isDisease || isUrgent ? 60 : 240; 
 
                     if (Find.TickManager.TicksGame % checkInterval == 0)
                     {
@@ -168,19 +183,30 @@ namespace Riminder
                         {
                             try
                             {
-                                // Update total tend duration if not set
+                                
                                 if (reminder.totalTendDuration <= 0 && __instance.tendTicksLeft > 0)
                                 {
                                     reminder.totalTendDuration = __instance.tendTicksLeft;
                                 }
 
-                                // Calculate progress
+                                
                                 if (__instance.IsTended && __instance.tendTicksLeft > 0 && reminder.totalTendDuration > 0)
                                 {
                                     reminder.tendProgress = 1f - ((float)__instance.tendTicksLeft / reminder.totalTendDuration);
                                 }
 
-                                reminder?.Trigger();
+                                
+                                if (reminder.actualTendTicksLeft == -1 ||
+                                    (__instance.tendTicksLeft > 0 && __instance.tendTicksLeft < reminder.actualTendTicksLeft))
+                                {
+                                    reminder.actualTendTicksLeft = __instance.tendTicksLeft;
+
+                                    
+                                    lastUpdateTicks[pawnId] = currentTick;
+
+                                    
+                                    reminder?.Trigger();
+                                }
                             }
                             catch (Exception ex)
                             {
@@ -575,19 +601,46 @@ namespace Riminder
                 {
                     if (patient == null || !patient.IsColonist) return;
 
+                    if (Prefs.DevMode)
+                    {
+                        Log.Message($"[Riminder] DoTend performed on {patient.LabelShort}");
+                    }
 
-                    RiminderManager.UpdateTendRemindersForPawn(patient);
+                    
+                    var tendedHediffs = patient.health.hediffSet.hediffs
+                        .Where(h => h is HediffWithComps hwc && hwc.TryGetComp<HediffComp_TendDuration>() != null)
+                        .ToList();
 
-
+                    
                     var reminders = RiminderManager.GetActiveReminders()
                         .OfType<PawnTendReminder>()
                         .Where(r => r.pawnId == patient.ThingID)
                         .ToList();
 
+                    if (reminders.Any() && Prefs.DevMode)
+                    {
+                        Log.Message($"[Riminder] Updating {reminders.Count} tend reminders for {patient.LabelShort}");
+                    }
+
+                    
                     foreach (var reminder in reminders)
                     {
+                        
+                        reminder.RefreshTrackedHediffs(patient);
+
+                        
+                        reminder.needsImmediateTending = false;
+                        reminder.actualTendTicksLeft = -1;
+
+                        
+                        reminder.UpdateLabelAndDescription(patient);
+
+                        
                         reminder.Trigger();
                     }
+
+                    
+                    RiminderManager.UpdateTendRemindersForPawn(patient);
                 }
                 catch (Exception ex)
                 {

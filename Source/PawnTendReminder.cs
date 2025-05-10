@@ -17,9 +17,9 @@ namespace Riminder
         public float tendProgress = 0f;
         public int totalTendDuration = -1;
 
-        // Add variables to track tend time consistently
-        private int actualTendTicksLeft = -1;
-        private bool needsImmediateTending = false;
+        
+        public int actualTendTicksLeft = -1;
+        public bool needsImmediateTending = false;
         private string cachedTendStatus = string.Empty;
 
         public class TrackedHediffInfo : IExposable
@@ -141,10 +141,10 @@ namespace Riminder
                 this.hediffLabel = "None";
             }
 
-            // Use our cached tend status for consistent display
+            
             this.description = GetTendDescription(pawn, this.actualTendTicksLeft, this.needsImmediateTending);
 
-            // Cache the description for debugging
+            
             this.cachedTendStatus = this.description;
         }
 
@@ -204,7 +204,7 @@ namespace Riminder
                     var tendComp = hwc.TryGetComp<HediffComp_TendDuration>();
                     if (tendComp != null)
                     {
-                        // Use override tend ticks if provided
+                        
                         int tendTicksLeft = overrideTendTicksLeft >= 0 ?
                             overrideTendTicksLeft : tendComp.tendTicksLeft;
 
@@ -214,7 +214,7 @@ namespace Riminder
                         if (tendComp.IsTended && !needsTending)
                         {
                             float hoursLeft = tendTicksLeft / (float)GenDate.TicksPerHour;
-                            // Ensure consistent display with GetTimeLeftString
+                            
                             if (hoursLeft <= 0)
                             {
                                 desc += " (Ready for tending)";
@@ -273,7 +273,7 @@ namespace Riminder
             Scribe_Values.Look(ref tendProgress, "tendProgress", 0f);
             Scribe_Collections.Look(ref trackedHediffs, "trackedHediffs", LookMode.Deep);
 
-            // Save our new cached values
+            
             Scribe_Values.Look(ref actualTendTicksLeft, "actualTendTicksLeft", -1);
             Scribe_Values.Look(ref needsImmediateTending, "needsImmediateTending", false);
             Scribe_Values.Look(ref cachedTendStatus, "cachedTendStatus", string.Empty);
@@ -303,47 +303,66 @@ namespace Riminder
                     Log.Warning($"[Riminder] No tendable hediff found for pawn {pawn.LabelShort} ({pawnId}) in reminder {id}. Reminder will NOT be completed here, just not alerted.");
             }
 
-            // Reset the status tracking
-            this.needsImmediateTending = false;
-            this.actualTendTicksLeft = -1;
+            
+            bool forceRefresh = this.actualTendTicksLeft == -1;
+            
+            
+            if (forceRefresh) 
+            {
+                this.needsImmediateTending = false;
+                this.actualTendTicksLeft = -1;
+            }
 
-            // Check if the hediff needs tending now
+            
             if (next != null)
             {
-                // First, use the TendableNow method which is the most reliable
+                
                 if (next.TendableNow())
                 {
                     this.needsImmediateTending = true;
+                    this.actualTendTicksLeft = 0;
                 }
-                // Check for bleeding injury
+                
                 else if (next is Hediff_Injury injury && injury.Bleeding)
                 {
                     this.needsImmediateTending = true;
+                    this.actualTendTicksLeft = 0;
                 }
-                // Check for tending components
+                
                 else if (next is HediffWithComps hwc)
                 {
                     var tendComp = hwc.TryGetComp<HediffComp_TendDuration>();
                     if (tendComp != null)
                     {
-                        // Store the actual tend ticks for later use
-                        this.actualTendTicksLeft = tendComp.tendTicksLeft;
+                        
+                        int newTendTicksLeft = tendComp.tendTicksLeft;
+                        
+                        
+                        if (forceRefresh || newTendTicksLeft >= 0)
+                        {
+                            this.actualTendTicksLeft = newTendTicksLeft;
+                            
+                            if (Prefs.DevMode && forceRefresh)
+                                Log.Message($"[Riminder] Force refreshed tend ticks for {pawn.LabelShort}: {this.actualTendTicksLeft}");
+                        }
 
-                        // Update the tend progress for display
+                        
                         if (this.actualTendTicksLeft > 0 && totalTendDuration > 0)
                         {
                             tendProgress = 1f - ((float)this.actualTendTicksLeft / totalTendDuration);
                         }
                         else if (tendComp.IsTended)
                         {
-                            // If this is the first time we're seeing the tend duration, record it
+                            
                             if (totalTendDuration <= 0 && this.actualTendTicksLeft > 0)
                             {
                                 totalTendDuration = this.actualTendTicksLeft;
+                                if (Prefs.DevMode)
+                                    Log.Message($"[Riminder] Set total tend duration for {pawn.LabelShort}: {totalTendDuration}");
                             }
                         }
 
-                        // Check if it needs tending now
+                        
                         if (!tendComp.IsTended || this.actualTendTicksLeft <= 0)
                         {
                             this.needsImmediateTending = true;
@@ -352,10 +371,10 @@ namespace Riminder
                 }
             }
 
-            // Now update the description with our consistent values
+            
             UpdateLabelAndDescription(pawn);
 
-            // Handle the notification state
+            
             if (this.needsImmediateTending)
             {
                 if (!alerted)
@@ -379,26 +398,28 @@ namespace Riminder
                 alerted = false;
             }
 
-            // Set reminder's next trigger based on tend ticks if available
+            
+            int oldTriggerTick = this.triggerTick;
+            
             if (this.actualTendTicksLeft > 0)
             {
-                // Use the exact tend ticks remaining for consistent display
+                
                 this.triggerTick = Find.TickManager.TicksGame + this.actualTendTicksLeft;
-                if (Prefs.DevMode)
-                    Log.Message($"[Riminder] Using exact tend ticks for {pawn.LabelShort} ({pawnId}): {this.actualTendTicksLeft} (in {this.actualTendTicksLeft / (float)GenDate.TicksPerHour:F1}h)");
+                if (Prefs.DevMode && oldTriggerTick != this.triggerTick)
+                    Log.Message($"[Riminder] Updated trigger time for {pawn.LabelShort} ({pawnId}): {this.actualTendTicksLeft} ticks (in {this.actualTendTicksLeft / (float)GenDate.TicksPerHour:F1}h)");
             }
             else if (this.needsImmediateTending)
             {
-                // Needs tending now, set trigger for immediate check
+                
                 this.triggerTick = Find.TickManager.TicksGame;
                 if (Prefs.DevMode)
                     Log.Message($"[Riminder] Pawn {pawn.LabelShort} needs immediate tending");
             }
             else
             {
-                // Calculate based on all hediffs if we can't use the exact tend ticks
+                
                 this.triggerTick = CalculateNextTendTick(pawn);
-                if (Prefs.DevMode)
+                if (Prefs.DevMode && oldTriggerTick != this.triggerTick)
                     Log.Message($"[Riminder] Calculated trigger for {pawn.LabelShort} ({pawnId}): {GetTimeLeftString()}");
             }
         }
@@ -446,19 +467,20 @@ namespace Riminder
             Pawn pawn = FindPawn();
             if (pawn == null) return base.GetTimeLeftString();
 
-            // Use our cached values for consistent display
+            
             if (this.needsImmediateTending)
                 return "Now";
 
+            
             if (this.actualTendTicksLeft > 0)
             {
-                // Calculate time left in various units
+                
                 float ticksLeft = this.actualTendTicksLeft;
                 float daysLeft = ticksLeft / (float)GenDate.TicksPerDay;
                 float hoursLeft = ticksLeft / (float)GenDate.TicksPerHour;
                 float minutesLeft = ticksLeft / (float)(GenDate.TicksPerHour / 60);
 
-                // Choose the appropriate time unit
+                
                 if (daysLeft >= 1.0f)
                     return $"in {daysLeft:F1} days";
                 else if (hoursLeft >= 1.0f)
@@ -466,9 +488,33 @@ namespace Riminder
                 else if (minutesLeft >= 1.0f)
                     return $"in {minutesLeft:F0} minutes";
                 else
-                    return $"in {ticksLeft / 60f:F0} seconds";
+                    return "ready soon";
+            }
+            
+            
+            Hediff nextTendable = FindHediff(pawn);
+            if (nextTendable != null && nextTendable is HediffWithComps hwc)
+            {
+                var tendComp = hwc.TryGetComp<HediffComp_TendDuration>();
+                if (tendComp != null)
+                {
+                    int tendTicksLeft = tendComp.tendTicksLeft;
+                    if (tendTicksLeft > 0)
+                    {
+                        
+                        this.actualTendTicksLeft = tendTicksLeft;
+                        
+                        
+                        return GetTimeLeftString();
+                    }
+                    else if (tendTicksLeft <= 0 && tendComp.IsTended)
+                    {
+                        return "ready soon"; 
+                    }
+                }
             }
 
+            
             return base.GetTimeLeftString();
         }
 
