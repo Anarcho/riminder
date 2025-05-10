@@ -47,6 +47,10 @@ namespace Riminder
                         if (!HasExistingReminder(pawn, hediff))
                         {
                             CreateTendReminder(pawn, hediff);
+                            if (Prefs.DevMode)
+                            {
+                                Log.Message($"[Riminder] AutoTendReminderManager created reminder for {pawn.LabelShort}'s {hediff.Label}");
+                            }
                         }
                         processedHediffs.Add(hediffId);
                     }
@@ -56,18 +60,14 @@ namespace Riminder
 
         private bool NeedsTending(Hediff hediff)
         {
-            
             if (hediff.IsPermanent()) return false;
 
-            
             if (hediff.def.defName.Contains("Removed") || 
                 hediff.Label.Contains("removed") || 
                 hediff.def.defName.Contains("Missing") || 
                 hediff.Label.Contains("missing")) return false;
             
-            
             if (hediff.Part != null && hediff.Part.def.tags.Contains(BodyPartTagDefOf.ConsciousnessSource)) return false;
-            
             
             if (hediff.Part != null)
             {
@@ -81,10 +81,8 @@ namespace Riminder
                 }
             }
 
-            
             if (hediff.def.chronic) return false;
 
-            
             if (hediff is HediffWithComps hediffWithComps)
             {
                 foreach (HediffComp comp in hediffWithComps.comps)
@@ -95,25 +93,39 @@ namespace Riminder
                     }
                 }
             }
+            
+            
+            if (hediff is Hediff_Injury injury && injury.Bleeding)
+            {
+                return true;
+            }
+            
             return false;
         }
 
         private string GetHediffIdentifier(Pawn pawn, Hediff hediff)
         {
-            return $"{pawn.ThingID}_{hediff.def.defName}";
+            
+            return $"{pawn.ThingID}|{hediff.def.defName}|{hediff.Part?.def.defName ?? "null"}";
         }
 
         private bool HasExistingReminder(Pawn pawn, Hediff hediff)
         {
+            
             foreach (Reminder reminder in RiminderManager.GetActiveReminders())
             {
                 if (reminder is PawnTendReminder tendReminder)
                 {
-                    if (tendReminder.pawnId == pawn.ThingID && 
-                        tendReminder.hediffId == GetHediffIdentifier(pawn, hediff))
-                    {
-                        return true;
-                    }
+                    if (tendReminder.pawnId != pawn.ThingID) continue;
+                    
+                    
+                    if (tendReminder.hediffLabel == hediff.def.label) return true;
+                    
+                    
+                    if (tendReminder.hediffId != null && tendReminder.hediffId.Contains(hediff.def.defName)) return true;
+                    
+                    
+                    if (hediff.loadID > 0 && tendReminder.hediffId == hediff.loadID.ToString()) return true;
                 }
             }
             return false;
@@ -137,6 +149,18 @@ namespace Riminder
         {
             base.ExposeData();
             Scribe_Collections.Look(ref processedHediffs, "processedHediffs", LookMode.Value);
+            
+            
+            if (Scribe.mode == LoadSaveMode.PostLoadInit)
+            {
+                processedHediffs.Clear();
+            }
+        }
+        
+        
+        public void ClearProcessedHediffs()
+        {
+            processedHediffs.Clear();
         }
     }
 }

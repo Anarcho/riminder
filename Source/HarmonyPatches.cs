@@ -261,6 +261,18 @@ namespace Riminder
         {
             private static HashSet<string> processedHediffs = new HashSet<string>();
 
+            
+            public static bool IsProcessed(string key)
+            {
+                return processedHediffs.Contains(key);
+            }
+
+            
+            public static void MarkAsProcessed(string key)
+            {
+                processedHediffs.Add(key);
+            }
+
             [HarmonyPatch(typeof(Game), "LoadGame")]
             public static class Game_LoadGame_Patch
             {
@@ -272,19 +284,29 @@ namespace Riminder
             {
                 public static void Postfix() => processedHediffs.Clear();
             }
-
+            
+            private static bool IsDisease(Hediff hediff)
+            {
+                if (hediff == null) return false;
+                
+                
+                if (hediff.def.HasComp(typeof(HediffComp_Immunizable)))
+                    return true;
+                
+                
+                if (hediff is HediffWithComps hwc && hwc.TryGetComp<HediffComp_Immunizable>() != null)
+                    return true;
+                
+                return false;
+            }
             
             private static bool IsActuallyTendable(Pawn pawn, Hediff hediff)
             {
-                
                 if (hediff == null || pawn == null) return false;
-                
                 
                 if (hediff.IsPermanent() || !hediff.def.tendable) return false;
                 
-                
                 if (hediff.def.defName == "StoppingBlood") return false;
-                
                 
                 if (hediff.def.defName.Contains("Missing") || 
                     hediff.def.defName.Contains("Removed") ||
@@ -294,20 +316,15 @@ namespace Riminder
                     hediff.Label.ToLower().Contains("scar"))
                     return false;
                 
-                
                 if (hediff.def.chronic) return false;
-                
                 
                 if (hediff.Part != null) 
                 {
                     bool partIsMissingOrDestroyed = false;
                     
-                    
                     foreach (var otherHediff in pawn.health.hediffSet.hediffs)
                     {
-                        
                         if (otherHediff == hediff) continue;
-                        
                         
                         if (otherHediff.Part == hediff.Part && 
                             (otherHediff.def.defName.Contains("Missing") || 
@@ -318,7 +335,6 @@ namespace Riminder
                             partIsMissingOrDestroyed = true;
                             break;
                         }
-                        
                         
                         BodyPartRecord parentPart = hediff.Part.parent;
                         while (parentPart != null) 
@@ -339,14 +355,12 @@ namespace Riminder
                     if (partIsMissingOrDestroyed) return false;
                 }
                 
-                
                 if (hediff is Hediff_Injury injury)
                 {
                     return injury.Severity > 0 && 
                            !injury.IsPermanent() && 
                            injury.TendableNow();
                 }
-                
                 
                 if (hediff is HediffWithComps hwc)
                 {
@@ -367,10 +381,22 @@ namespace Riminder
                     
                     if (!RiminderMod.Settings.autoCreateTendReminders) return;
                     
-                    if (!IsActuallyTendable(pawn, hediff)) return;
+                    
+                    bool isDiseaseHediff = IsDisease(hediff);
+                    bool isTendable = IsActuallyTendable(pawn, hediff);
+                    
+                    if (!isTendable && !isDiseaseHediff) return;
+                    
                     
                     string hediffKey = $"{pawn.ThingID}|{hediff.def.defName}|{hediff.Part?.def.defName ?? "null"}";
-                    if (processedHediffs.Contains(hediffKey)) return;
+                    
+                    
+                    if (!isDiseaseHediff && IsProcessed(hediffKey)) return;
+                    
+                    if (isDiseaseHediff && Prefs.DevMode)
+                    {
+                        Log.Message($"[Riminder] Disease detected: {hediff.Label} on {pawn.LabelShort}");
+                    }
                     
                     
                     bool hasExistingReminder = false;
@@ -379,10 +405,31 @@ namespace Riminder
                     foreach (var reminder in allReminders.OfType<PawnTendReminder>())
                     {
                         if (reminder.pawnId != pawn.ThingID) continue;
-                        if (reminder.hediffLabel == hediff.def.label || reminder.hediffId.Contains(hediff.def.defName)) { hasExistingReminder = true; break; }
-                        if (hediff.loadID > 0 && reminder.hediffId == hediff.loadID.ToString()) { hasExistingReminder = true; break; }
+                        
+                        
+                        if (reminder.hediffLabel == hediff.def.label) 
+                        {
+                            hasExistingReminder = true;
+                            break;
+                        }
+                        
+                        
+                        if (reminder.hediffId != null && hediff.def != null && 
+                            reminder.hediffId.Contains(hediff.def.defName)) 
+                        {
+                            hasExistingReminder = true;
+                            break;
+                        }
+                        
+                        
+                        if (hediff.loadID > 0 && reminder.hediffId == hediff.loadID.ToString()) 
+                        {
+                            hasExistingReminder = true;
+                            break;
+                        }
                     }
 
+                    
                     if (!hasExistingReminder)
                     {
                         var reminder = new PawnTendReminder(
@@ -391,9 +438,15 @@ namespace Riminder
                             hediff is HediffWithComps hwc2 && hwc2.TryGetComp<HediffComp_Immunizable>() != null
                         );
                         RiminderManager.AddReminder(reminder);
-                        processedHediffs.Add(hediffKey);
+                        if (Prefs.DevMode)
+                        {
+                            Log.Message($"[Riminder] Created tend reminder for {pawn.LabelShort}'s {hediff.Label}");
+                        }
                     }
-
+                    
+                    
+                    MarkAsProcessed(hediffKey);
+                    
                     
                     RiminderManager.UpdateTendRemindersForPawn(pawn);
                 }
