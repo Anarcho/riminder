@@ -13,6 +13,7 @@ namespace Riminder
         public int TendTicksLeft;
         public bool IsBleeding;
         public bool IsDisease;
+        public bool IsChronic;
     }
 
     public class TendReminderDataProvider : IExposable, IReminderDataProvider
@@ -136,6 +137,7 @@ namespace Riminder
                     int tendTicks = int.MaxValue;
                     bool isBleeding = false;
                     bool isDisease = false;
+                    bool isChronic = false;
                     if (found is HediffWithComps hwc)
                     {
                         var tendComp = hwc.TryGetComp<HediffComp_TendDuration>();
@@ -146,11 +148,13 @@ namespace Riminder
                     }
                     if (found is Hediff_Injury injury && injury.Bleeding)
                         isBleeding = true;
+                    isChronic = found.def.chronic;
                     trackedHediffs.Add(new TendableHediffInfo {
                         Hediff = found,
                         TendTicksLeft = tendTicks,
                         IsBleeding = isBleeding,
-                        IsDisease = isDisease
+                        IsDisease = isDisease,
+                        IsChronic = isChronic
                     });
                 }
                 else
@@ -158,9 +162,10 @@ namespace Riminder
                     trackedHediffIds.Remove(id);
                 }
             }
+            // Remove the reminder if no valid tendable hediffs remain
             if (trackedHediffs.Count == 0)
             {
-                SetDefaults($"Monitor {pawnLabel}");
+                RiminderManager.RemoveReminderForPawn(pawnId);
                 return;
             }
             // Group by defName + partDefName and keep only the most urgent (lowest tendTicksLeft) for each unique instance
@@ -170,15 +175,16 @@ namespace Riminder
                 .ToList();
             if (grouped.Count == 0)
             {
-                // No more valid tendable hediffs, mark reminder as complete
+                // No more valid tendable hediffs, mark reminder as complete and remove
                 RiminderManager.RemoveReminderForPawn(pawnId);
-                SetDefaults($"Monitor {pawnLabel}");
                 return;
             }
-            // Prioritize: bleeding > disease > other, then by lowest tendTicksLeft
+            // Prioritize: bleeding > acute immunizable disease > other immunizable disease > chronic > other
             var urgentInfo = grouped
                 .OrderByDescending(x => x.IsBleeding)
-                .ThenByDescending(x => x.IsDisease)
+                .ThenByDescending(x => x.IsDisease && !x.IsChronic) // acute immunizable
+                .ThenByDescending(x => x.IsDisease) // any immunizable
+                .ThenByDescending(x => !x.IsChronic) // non-chronic before chronic
                 .ThenBy(x => x.TendTicksLeft)
                 .FirstOrDefault();
             Hediff urgent = urgentInfo?.Hediff;
