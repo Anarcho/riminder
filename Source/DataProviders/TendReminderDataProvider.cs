@@ -179,9 +179,27 @@ namespace Riminder
                 RiminderManager.RemoveReminderForPawn(pawnId);
                 return;
             }
-            // Prioritize: bleeding > acute immunizable disease > other immunizable disease > chronic > other
+            // Prioritize: TendPriority > bleeding > acute immunizable disease > other immunizable disease > chronic > other
             var urgentInfo = grouped
-                .OrderByDescending(x => x.IsBleeding)
+                .OrderByDescending(x => {
+                    // First prioritize hediffs that actually need tending now
+                    if (x.Hediff is HediffWithComps hwc)
+                    {
+                        var tendComp = hwc.TryGetComp<HediffComp_TendDuration>();
+                        if (tendComp != null)
+                        {
+                            // If not tended or ready to tend again, highest priority
+                            return tendComp.IsTended ? 
+                                (tendComp.tendTicksLeft <= tendComp.TProps.TendTicksOverlap ? 2 : 0) : 
+                                3; // Not tended at all = highest priority (3)
+                        }
+                    }
+                    // Bleeding injuries always need tending
+                    if (x.IsBleeding) return 3;
+                    return 0; // Doesn't need immediate tending
+                })
+                .ThenByDescending(x => x.Hediff.TendPriority)
+                .ThenByDescending(x => x.IsBleeding)
                 .ThenByDescending(x => x.IsDisease && !x.IsChronic) // acute immunizable
                 .ThenByDescending(x => x.IsDisease) // any immunizable
                 .ThenByDescending(x => !x.IsChronic) // non-chronic before chronic
@@ -312,15 +330,56 @@ namespace Riminder
             // Add immunity info if applicable
             if (hediff is HediffWithComps hwc)
             {
-                var immComp = hwc.TryGetComp<HediffComp_Immunizable>();
-                if (immComp != null)
+                // For chronic diseases, show severity per day
+                if (hediff.def.chronic)
                 {
-                    desc += $"\n<color=#FFFF00>Immunity: {immComp.Immunity:P0}";
-                    if (immComp.Immunity >= 0.8f)
-                        desc += " (Almost immune)";
-                    else if (immComp.Immunity >= 0.5f)
-                        desc += " (Good progress)";
-                    desc += "</color>";
+                    bool severityDisplayed = false;
+                    
+                    // First try to get HediffComp_SeverityPerDay
+                    var severityComp = hwc.TryGetComp<HediffComp_SeverityPerDay>();
+                    if (severityComp != null)
+                    {
+                        float severityChange = severityComp.SeverityChangePerDay();
+                        string direction = severityChange < 0 ? "decreasing" : "increasing";
+                        string color = severityChange < 0 ? "#88FF88" : "#FF8888";
+                        desc += $"\n<color={color}>Severity/day: {Math.Abs(severityChange):F3} ({direction})</color>";
+                        severityDisplayed = true;
+                    }
+                    
+                    // Also try for HediffComp_SeverityModifierBase which might be used instead
+                    if (!severityDisplayed)
+                    {
+                        var allComps = hwc.comps;
+                        if (allComps != null)
+                        {
+                            foreach (var comp in allComps)
+                            {
+                                if (comp is HediffComp_SeverityModifierBase severityModComp)
+                                {
+                                    float severityChange = severityModComp.SeverityChangePerDay();
+                                    string direction = severityChange < 0 ? "decreasing" : "increasing";
+                                    string color = severityChange < 0 ? "#88FF88" : "#FF8888";
+                                    desc += $"\n<color={color}>Severity/day: {Math.Abs(severityChange):F3} ({direction})</color>";
+                                    severityDisplayed = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                // Only show immunity for non-chronic diseases
+                else
+                {
+                    var immComp = hwc.TryGetComp<HediffComp_Immunizable>();
+                    if (immComp != null)
+                    {
+                        desc += $"\n<color=#FFFF00>Immunity: {immComp.Immunity:P0}";
+                        if (immComp.Immunity >= 0.8f)
+                            desc += " (Almost immune)";
+                        else if (immComp.Immunity >= 0.5f)
+                            desc += " (Good progress)";
+                        desc += "</color>";
+                    }
                 }
             }
             

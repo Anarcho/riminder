@@ -173,9 +173,20 @@ namespace Riminder
                         || __instance.parent is HediffWithComps hwc && hwc.TryGetComp<HediffComp_Immunizable>() != null;
 
                     bool isUrgent = __instance.tendTicksLeft <= GenDate.TicksPerHour || !__instance.IsTended;
-
                     
-                    int checkInterval = isDisease || isUrgent ? 60 : 240; 
+                    // Get tend priority to determine how frequently to check
+                    float tendPriority = __instance.parent?.TendPriority ?? 0f;
+                    
+                    // Determine check interval based on priority alone
+                    int checkInterval;
+                    if (tendPriority >= 1.0f)
+                        checkInterval = 30; // Critical priority - check very frequently
+                    else if (tendPriority >= 0.5f)
+                        checkInterval = 60; // High priority - check frequently
+                    else if (tendPriority >= 0.1f)
+                        checkInterval = 120; // Medium priority
+                    else
+                        checkInterval = 240; // Low priority - check less frequently
 
                     if (Find.TickManager.TicksGame % checkInterval == 0)
                     {
