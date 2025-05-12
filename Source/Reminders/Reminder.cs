@@ -57,10 +57,14 @@ namespace Riminder
         {
             if (dismissed) return;
 
-            Find.LetterStack.ReceiveLetter(
-                "Reminder: " + GetLabel(),
-                GetDescription(),
-                LetterDefOf.NeutralEvent);
+            // Check if alerts are enabled for normal reminders
+            if (RiminderMod.Settings.showNotifications && RiminderMod.Settings.enableNormalAlerts)
+            {
+                Find.LetterStack.ReceiveLetter(
+                    "Reminder: " + GetLabel(),
+                    GetDescription(),
+                    LetterDefOf.NeutralEvent);
+            }
 
             Log.Message($"[Riminder] Reminder triggered: {GetLabel()}");
 

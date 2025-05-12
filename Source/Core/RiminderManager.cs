@@ -193,6 +193,7 @@ namespace Riminder
 
                 return instance.reminders
                     .Where(r => r != null && !r.completed && !r.dismissed)
+                    .Where(r => ShouldShowReminder(r))
                     .ToList();
             }
             catch (Exception ex)
@@ -200,6 +201,20 @@ namespace Riminder
                 Log.Error($"[Riminder] Error getting active reminders: {ex}");
                 return new List<BaseReminder>();
             }
+        }
+
+        private static bool ShouldShowReminder(BaseReminder reminder)
+        {
+            // Check if this is a tend reminder
+            bool isTendReminder = reminder is TendReminder || 
+                                reminder.GetLabel().StartsWith("Tend ") || 
+                                reminder.frequency == ReminderFrequency.WhenTendingRequired;
+                                
+            // Check if reminders are enabled for this type
+            if (isTendReminder)
+                return RiminderMod.Settings.enableTendReminders;
+            else
+                return RiminderMod.Settings.enableNormalReminders;
         }
 
         public static List<BaseReminder> GetActiveTendReminders()
@@ -212,6 +227,10 @@ namespace Riminder
             
             try
             {
+                // Only return tend reminders if the setting is enabled
+                if (!RiminderMod.Settings.enableTendReminders)
+                    return new List<BaseReminder>();
+                    
                 return instance.reminders
                     .Where(r => r != null && (r is TendReminder || r.GetLabel().StartsWith("Tend ")) && !r.completed && !r.dismissed)
                     .ToList();

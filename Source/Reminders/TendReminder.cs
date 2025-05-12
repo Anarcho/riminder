@@ -80,7 +80,9 @@ namespace Riminder
             bool needsAttention = dataProvider != null && ((TendReminderDataProvider)dataProvider).NeedsAttention();
             
             // Only trigger if state changed from not needing to needing tend
-            if (needsAttention && !wasNeedingTendLastTick)
+            // And only if tend alerts are enabled
+            if (needsAttention && !wasNeedingTendLastTick && 
+                RiminderMod.Settings.showNotifications && RiminderMod.Settings.enableTendAlerts)
             {
                 Find.LetterStack.ReceiveLetter(
                     "Tend Reminder: " + GetLabel(),

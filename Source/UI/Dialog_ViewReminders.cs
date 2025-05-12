@@ -14,6 +14,17 @@ namespace Riminder
         private string filterText = "";
         private string selectedFilter = "All";
         private readonly string[] filterOptions = new string[] { "All", "Tend", "Other" };
+        
+        // Add sorting options
+        private enum SortBy
+        {
+            Name,
+            Urgency,
+            None
+        }
+        
+        private SortBy currentSort = SortBy.None;
+        private bool sortAscending = true;
 
         private const float Padding = 15f;
         private const float LineHeight = 30f;
@@ -42,8 +53,8 @@ namespace Riminder
         public override void DoWindowContents(Rect inRect)
         {
             // Check if we should refresh based on time passed
-            // Refresh more frequently for better UI responsiveness
-            if (Find.TickManager.TicksGame > lastUpdateTick + 5)
+            // Refresh more frequently for better UI responsiveness - reduce to 1 tick for near real-time updates
+            if (Find.TickManager.TicksGame > lastUpdateTick + 1)
             {
                 RefreshAllReminders();
                 // Force redraw for immediate visual update
@@ -54,10 +65,8 @@ namespace Riminder
             float currentY = Padding; 
 
             DrawHeader(inRect, ref currentY, usableWidth);
+            DrawSortingControls(usableWidth, ref currentY);
             
-            // We no longer need this here as it's handled by the time check above
-            // RefreshTendReminders();
-
             if (reminders.Count == 0)
             {
                 DrawNoRemindersLabel(currentY, usableWidth);
@@ -66,6 +75,9 @@ namespace Riminder
             }
 
             var filteredReminders = GetFilteredReminders();
+            // Apply sorting
+            filteredReminders = SortReminders(filteredReminders);
+            
             DrawRemindersList(filteredReminders, inRect, usableWidth, ref currentY);
             DrawCloseButton(inRect);
         }
@@ -92,6 +104,97 @@ namespace Riminder
                 Close();
             }
             currentY += LineHeight + Padding;
+        }
+        
+        private void DrawSortingControls(float usableWidth, ref float currentY)
+        {
+            Rect sortLabelRect = new Rect(Padding, currentY, 50f, LineHeight);
+            Widgets.Label(sortLabelRect, "Sort by:");
+            
+            // Sort by Name button
+            Rect sortNameRect = new Rect(Padding + 55f, currentY, 80f, LineHeight);
+            if (Widgets.ButtonText(sortNameRect, "Name " + GetSortIndicator(SortBy.Name)))
+            {
+                if (currentSort == SortBy.Name)
+                    sortAscending = !sortAscending;
+                else
+                {
+                    currentSort = SortBy.Name;
+                    sortAscending = true;
+                }
+            }
+            
+            // Sort by Urgency button
+            Rect sortUrgencyRect = new Rect(Padding + 140f, currentY, 80f, LineHeight);
+            if (Widgets.ButtonText(sortUrgencyRect, "Urgency " + GetSortIndicator(SortBy.Urgency)))
+            {
+                if (currentSort == SortBy.Urgency)
+                    sortAscending = !sortAscending;
+                else
+                {
+                    currentSort = SortBy.Urgency;
+                    sortAscending = true;
+                }
+            }
+            
+            // Add clear sort button
+            if (currentSort != SortBy.None)
+            {
+                Rect clearSortRect = new Rect(Padding + 225f, currentY, 80f, LineHeight);
+                if (Widgets.ButtonText(clearSortRect, "Clear Sort"))
+                {
+                    currentSort = SortBy.None;
+                    sortAscending = true;
+                }
+            }
+            
+            currentY += LineHeight + Padding;
+        }
+        
+        private string GetSortIndicator(SortBy sortType)
+        {
+            if (currentSort != sortType)
+                return "";
+                
+            return sortAscending ? "↑" : "↓";
+        }
+        
+        private List<BaseReminder> SortReminders(List<BaseReminder> remindersToSort)
+        {
+            switch (currentSort)
+            {
+                case SortBy.Name:
+                    return sortAscending 
+                        ? remindersToSort.OrderBy(r => r.GetLabel()).ToList()
+                        : remindersToSort.OrderByDescending(r => r.GetLabel()).ToList();
+                
+                case SortBy.Urgency:
+                    // For urgency sorting, we want to sort by:
+                    // 1. Overdue reminders first (current tick > trigger tick)
+                    // 2. Then by time left until trigger
+                    
+                    int currentTick = Find.TickManager.TicksGame;
+                    
+                    if (sortAscending)
+                    {
+                        // Ascending = soonest/most overdue first
+                        return remindersToSort
+                            .OrderBy(r => currentTick >= r.triggerTick ? 0 : 1) // Overdue first
+                            .ThenBy(r => r.triggerTick) // Then by trigger time
+                            .ToList();
+                    }
+                    else
+                    {
+                        // Descending = furthest in future first
+                        return remindersToSort
+                            .OrderByDescending(r => currentTick >= r.triggerTick ? 0 : 1) // Future first
+                            .ThenByDescending(r => r.triggerTick) // Then by trigger time
+                            .ToList();
+                    }
+                
+                default:
+                    return remindersToSort;
+            }
         }
 
         private void DrawNoRemindersLabel(float currentY, float usableWidth)

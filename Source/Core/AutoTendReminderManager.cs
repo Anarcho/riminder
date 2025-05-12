@@ -29,7 +29,7 @@ namespace Riminder
         {
             if (Find.TickManager.TicksGame % 60 != 0) return;
 
-            if (!RiminderMod.Settings.autoCreateTendReminders) return;
+            if (!RiminderMod.Settings.autoCreateTendReminders || !RiminderMod.Settings.enableTendReminders) return;
 
             foreach (Pawn pawn in PawnsFinder.AllMapsCaravansAndTravelingTransportPods_Alive_Colonists)
             {

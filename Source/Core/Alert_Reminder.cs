@@ -50,11 +50,32 @@ namespace Riminder
             List<BaseReminder> activeReminders = RiminderManager.GetActiveReminders();
             
             int currentTick = Find.TickManager.TicksGame;
+            
+            // Filter reminders based on settings and whether they're due
             dueReminders = activeReminders
                 .Where(r => !r.dismissed && !r.completed && r.triggerTick <= currentTick)
+                .Where(r => ShouldShowAlert(r))
                 .ToList();
             
             return dueReminders.Count > 0;
+        }
+        
+        private bool ShouldShowAlert(BaseReminder reminder)
+        {
+            // Check if notifications are disabled globally
+            if (!RiminderMod.Settings.showNotifications)
+                return false;
+                
+            // Check if this is a tend reminder
+            bool isTendReminder = reminder is TendReminder || 
+                                 reminder.GetLabel().StartsWith("Tend ") || 
+                                 reminder.frequency == ReminderFrequency.WhenTendingRequired;
+                                 
+            // Check if alerts are enabled for this type of reminder
+            if (isTendReminder)
+                return RiminderMod.Settings.enableTendAlerts;
+            else
+                return RiminderMod.Settings.enableNormalAlerts;
         }
     }
 }
