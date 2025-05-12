@@ -37,19 +37,8 @@ namespace Riminder
                 hediffs.Add(hediff);
             }
             
-            // Add other tendable hediffs from the pawn
-            if (pawn != null && pawn.health != null)
-            {
-                foreach (var h in pawn.health.hediffSet.hediffs)
-                {
-                    if (h != hediff && h is HediffWithComps hwc && hwc.TryGetComp<HediffComp_TendDuration>() != null)
-                    {
-                        hediffs.Add(h);
-                    }
-                }
-            }
-            
-            // Create the data provider with all the hediffs
+            // We now focus only on the specified hediff instead of adding all tendable hediffs
+            // This prevents potential duplicate reminder creation issues
             this.dataProvider = new TendReminderDataProvider(pawn, hediffs, removeOnImmunity);
             
             // First refresh to set up
@@ -80,6 +69,13 @@ namespace Riminder
         {
             // Update data first
             dataProvider?.Refresh();
+            
+            // Ensure progress is synchronized
+            if (dataProvider != null)
+            {
+                // Force progress update from data provider
+                tendProgress = ((TendReminderDataProvider)dataProvider).GetProgress();
+            }
             
             bool needsAttention = dataProvider != null && ((TendReminderDataProvider)dataProvider).NeedsAttention();
             
@@ -220,6 +216,136 @@ namespace Riminder
                 return Find.CurrentMap?.mapPawns?.AllPawns.FirstOrDefault(p => p.ThingID == pawnId);
             }
             return null;
+        }
+        
+        // Return the latest progress value for UI
+        public override float GetProgress()
+        {
+            // Force a recalculation first
+            ForceProgressUpdate();
+            return tendProgress;
+        }
+        
+        // Force progress update method that can be called from any code path
+        public void ForceProgressUpdate()
+        {
+            Pawn pawn = FindPawn();
+            if (pawn == null) return;
+            
+            // DEBUG: Log all hediff information in dev mode
+            if (Prefs.DevMode)
+            {
+                Log.Message($"[Riminder] ForceProgressUpdate for {pawn.LabelShort} - Starting hediff check");
+                foreach (var h in pawn.health.hediffSet.hediffs)
+                {
+                    if (h is HediffWithComps hwc && hwc.TryGetComp<HediffComp_TendDuration>() != null)
+                    {
+                        var comp = hwc.TryGetComp<HediffComp_TendDuration>();
+                        Log.Message($"[Riminder] Hediff: {h.Label}, isTended: {comp.IsTended}, tendTicksLeft: {comp.tendTicksLeft}, chronic: {h.def.chronic}");
+                    }
+                }
+            }
+            
+            // Reset progress to ensure a clean calculation
+            tendProgress = 0f;
+            
+            // Update the data provider first to ensure we have latest data
+            if (dataProvider != null)
+            {
+                dataProvider.Refresh();
+                
+                // After refresh, get the latest progress directly from the data provider
+                // which handles prioritization between multiple hediffs
+                tendProgress = dataProvider.GetProgress();
+                
+                if (Prefs.DevMode && tendProgress > 0)
+                {
+                    Log.Message($"[Riminder] Progress from data provider: {tendProgress}");
+                }
+                
+                // If data provider gave us a valid progress, use it directly
+                if (tendProgress > 0)
+                {
+                    return;
+                }
+            }
+            
+            // Get the most urgent hediff based on label matching
+            string reminderLabel = GetLabel().ToLowerInvariant();
+            var matchingHediffs = new List<Hediff>();
+            
+            // First pass - find all hediffs mentioned in the reminder label
+            foreach (var hediff in pawn.health.hediffSet.hediffs)
+            {
+                if (hediff is HediffWithComps hwc && hwc.TryGetComp<HediffComp_TendDuration>() != null)
+                {
+                    if (reminderLabel.ToLowerInvariant().Contains(hediff.def.label.ToLowerInvariant()))
+                    {
+                        matchingHediffs.Add(hediff);
+                    }
+                }
+            }
+            
+            // If no matches by label, fall back to checking all tendable hediffs
+            if (matchingHediffs.Count == 0)
+            {
+                foreach (var hediff in pawn.health.hediffSet.hediffs)
+                {
+                    if (hediff is HediffWithComps hwc && hwc.TryGetComp<HediffComp_TendDuration>() != null)
+                    {
+                        matchingHediffs.Add(hediff);
+                    }
+                }
+            }
+            
+            // Sort hediffs by priority, bleeding first, then disease, then by tend ticks remaining
+            var prioritizedHediffs = matchingHediffs
+                .OrderByDescending(h => h is Hediff_Injury injury && injury.Bleeding)
+                .ThenByDescending(h => h.TendPriority)
+                .ThenByDescending(h => h.def.HasComp(typeof(HediffComp_Immunizable)) || 
+                                       (h is HediffWithComps hwc && hwc.TryGetComp<HediffComp_Immunizable>() != null))
+                .ThenBy(h => {
+                    // Sort by tend ticks left, placing hediffs that need tending now first
+                    if (h is HediffWithComps hwc)
+                    {
+                        var tendComp = hwc.TryGetComp<HediffComp_TendDuration>();
+                        if (tendComp != null)
+                        {
+                            if (!tendComp.IsTended) return int.MinValue; // Not tended at all = highest priority
+                            return tendComp.tendTicksLeft;
+                        }
+                    }
+                    return int.MaxValue;
+                })
+                .ToList();
+                
+            if (prioritizedHediffs.Count > 0)
+            {
+                // Use the highest priority hediff for progress
+                var urgentHediff = prioritizedHediffs[0];
+                if (urgentHediff is HediffWithComps hwc)
+                {
+                    var tendComp = hwc.TryGetComp<HediffComp_TendDuration>();
+                    if (tendComp != null)
+                    {
+                        // Initialize totalDuration if not set
+                        if (totalTendDuration <= 0)
+                        {
+                            totalTendDuration = GenDate.TicksPerDay;
+                        }
+                        
+                        actualTendTicksLeft = tendComp.tendTicksLeft;
+                        
+                        // Use the unified progress calculation method
+                        tendProgress = TendReminderDataProvider.CalculateHediffProgress(urgentHediff, tendComp);
+                        
+                        if (Prefs.DevMode)
+                        {
+                            Log.Message($"[Riminder] Progress calculated for {urgentHediff.Label}: {tendProgress}, tendTicksLeft: {tendComp.tendTicksLeft}, totalDuration: {totalTendDuration}");
+                        }
+                    }
+                }
+            }
         }
     }
 }

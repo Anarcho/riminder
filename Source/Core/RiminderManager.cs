@@ -92,6 +92,10 @@ namespace Riminder
                             try
                             {
                                 reminder.Trigger();
+                                
+                                // Force a UI refresh after triggering a reminder
+                                // This is critical for progress bars to reset properly
+                                RefreshOpenDialogs();
                             }
                             catch (Exception ex)
                             {
@@ -284,6 +288,15 @@ namespace Riminder
                             if (reminders[i].completed || reminders[i].dismissed)
                             {
                                 reminders.RemoveAt(i);
+                            }
+                            else if (Prefs.DevMode)
+                            {
+                                // Debug check to verify lastTriggerTick values
+                                Log.Message($"[Riminder] Loaded reminder: {reminders[i].GetLabel()}, " +
+                                          $"frequency={reminders[i].frequency}, " +
+                                          $"lastTriggerTick={reminders[i].lastTriggerTick}, " +
+                                          $"createdTick={reminders[i].createdTick}, " +
+                                          $"triggerTick={reminders[i].triggerTick}");
                             }
                         }
                         RemoveDuplicateTendReminders();

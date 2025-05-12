@@ -261,25 +261,60 @@ namespace Riminder
                     // Determine if needs attention - FIX: Only set to true if it actually needs tending now
                     needsAttention = !tendComp.IsTended || nextTendableInTicks <= 0;
                     
-                    // Calculate progress
-                    if (tendComp.IsTended && tendTicksLeft > 0)
-                    {
-                        // Calculate the original maximum duration from the current tend quality
-                        int baseTendDuration = 60000; // Default value if we can't determine
-                        if (tendComp != null && tendComp.TProps != null)
-                        {
-                            // Use a reasonable default based on RimWorld's tend durations
-                            // Most tend durations are 1 day + quality-based extension
-                            baseTendDuration = GenDate.TicksPerDay;
-                        }
-                        progress = 1f - (float)tendTicksLeft / baseTendDuration;
-                    }
-                    else
-                    {
-                        progress = 1f; // Ready to tend
-                    }
+                    // Use the unified progress calculation
+                    progress = CalculateHediffProgress(hediff, tendComp);
                 }
             }
+        }
+        
+        // Utility method for consistent progress calculation
+        public static float CalculateHediffProgress(Hediff hediff, HediffComp_TendDuration tendComp)
+        {
+            // If not tended or no tend ticks left, progress is 100%
+            if (tendComp == null || !tendComp.IsTended || tendComp.tendTicksLeft <= 0)
+                return 1f;
+                
+            float progress;
+            
+            if (hediff.def.chronic)
+            {
+                // Standard duration reference - one game day
+                int standardDuration = GenDate.TicksPerDay;
+                
+                // For chronic conditions, use a fixed scale approach instead of fluctuating percentage
+                if (tendComp.tendTicksLeft > standardDuration)
+                {
+                    // Scale from 0.1 to 0.9 based on days left
+                    float daysLeft = tendComp.tendTicksLeft / (float)standardDuration;
+                    float maxDays = 10f; // Cap at 10 days
+                    
+                    // Inverted logarithmic scale for more stable display
+                    // This gives diminishing changes as days increase
+                    daysLeft = Math.Min(daysLeft, maxDays);
+                    progress = 0.9f - (0.8f * (daysLeft / maxDays));
+                }
+                else
+                {
+                    // Normal linear progress for the final day
+                    progress = 0.9f - (0.8f * tendComp.tendTicksLeft / (float)standardDuration);
+                }
+            }
+            else
+            {
+                // For non-chronic conditions, use standard linear progress
+                int baseTendDuration = GenDate.TicksPerDay;
+                
+                // Adjust for tend props if available
+                if (tendComp.TProps != null && tendComp.TProps.TendTicksOverlap > 0)
+                {
+                    baseTendDuration = Math.Max(baseTendDuration - tendComp.TProps.TendTicksOverlap, GenDate.TicksPerHour * 4);
+                }
+                
+                progress = 1f - (float)tendComp.tendTicksLeft / baseTendDuration;
+            }
+            
+            // Ensure progress stays in valid range
+            return Math.Max(0f, Math.Min(1f, progress));
         }
         
         private void FormatOutputs(Pawn pawn, Hediff hediff)

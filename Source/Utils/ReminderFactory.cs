@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Verse;
 using RimWorld;
+using System.Linq;
 
 namespace Riminder
 {
@@ -44,6 +45,34 @@ namespace Riminder
             
             try
             {
+                // First check if a reminder already exists for this pawn
+                var existingReminders = RiminderManager.GetActiveTendReminders()
+                    .Where(r => r is TendReminder tendReminder && 
+                           tendReminder.FindPawn() == pawn)
+                    .ToList();
+                    
+                if (existingReminders.Any())
+                {
+                    if (Prefs.DevMode)
+                    {
+                        Log.Message($"[Riminder] Not creating new reminder for {pawn.LabelShort} - reminder already exists");
+                    }
+                    
+                    // Instead of creating a new one, refresh the existing one
+                    foreach (var existing in existingReminders)
+                    {
+                        if (existing is TendReminder tendReminder)
+                        {
+                            tendReminder.dataProvider?.Refresh();
+                            tendReminder.Trigger();
+                        }
+                    }
+                    
+                    // Return the first existing reminder
+                    return existingReminders.FirstOrDefault() as TendReminder;
+                }
+                
+                // Create a new reminder only if one doesn't exist
                 var reminder = new TendReminder(pawn, hediff, removeOnImmunity);
                 reminder.def = ReminderDefOf.TendReminder;
                 return reminder;

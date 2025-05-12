@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Verse;
 using RimWorld;
 
@@ -18,8 +19,12 @@ namespace Riminder
     {
         private string _label;
         private string _description;
+        public Dictionary<string, string> metadata;
 
-        public Reminder() : base() { }
+        public Reminder() : base() 
+        { 
+            metadata = new Dictionary<string, string>();
+        }
 
         public Reminder(string label, string description, int triggerTick, ReminderFrequency frequency = ReminderFrequency.OneTime)
             : base()
@@ -28,6 +33,7 @@ namespace Riminder
             this._description = description;
             this.triggerTick = triggerTick;
             this.frequency = frequency;
+            this.metadata = new Dictionary<string, string>();
         }
 
         public override string GetLabel() => _label ?? base.GetLabel();
@@ -41,6 +47,10 @@ namespace Riminder
             base.ExposeData();
             Scribe_Values.Look(ref _label, "label");
             Scribe_Values.Look(ref _description, "description");
+            Scribe_Collections.Look(ref metadata, "metadata", LookMode.Value, LookMode.Value);
+            
+            if (metadata == null)
+                metadata = new Dictionary<string, string>();
         }
 
         public override void Trigger()
@@ -71,6 +81,22 @@ namespace Riminder
         public override void OpenEditDialog()
         {
             Find.WindowStack.Add(new Dialog_EditReminder(this));
+        }
+
+        public override float GetProgress()
+        {
+            float progress = DefaultProgressValue();
+            
+            // Always log in dev mode to track progress calculation
+            if (Prefs.DevMode)
+            {
+                int currentTick = Find.TickManager.TicksGame;
+                Log.Message($"[Riminder] GetProgress for '{GetLabel()}': {progress:P0} " +
+                            $"[current: {currentTick}, created: {createdTick}, trigger: {triggerTick}, " +
+                            $"elapsed: {currentTick - createdTick}, total: {triggerTick - createdTick}]");
+            }
+            
+            return progress;
         }
     }
 }
