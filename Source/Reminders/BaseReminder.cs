@@ -14,10 +14,10 @@ namespace Riminder
         public bool completed;
         public bool dismissed;
         
-        // Add a separate field for recurrence interval
+        
         public int recurrenceInterval;
         
-        // Add a field to track the last time this reminder was triggered
+        
         public int lastTriggerTick;
         
         public ReminderDef def;
@@ -27,7 +27,7 @@ namespace Riminder
         {
             id = Guid.NewGuid().ToString();
             createdTick = Find.TickManager.TicksGame;
-            lastTriggerTick = createdTick; // Initialize to creation time
+            lastTriggerTick = createdTick; 
             completed = false;
             dismissed = false;
             recurrenceInterval = 0;
@@ -45,7 +45,7 @@ namespace Riminder
             Scribe_Values.Look(ref lastTriggerTick, "lastTriggerTick", createdTick);
             Scribe_Defs.Look(ref def, "def");
             
-            // Data provider is loaded separately by concrete reminder classes
+            
         }
 
         public virtual void Trigger()
@@ -55,11 +55,6 @@ namespace Riminder
             dataProvider?.Refresh();
             
             int currentTick = Find.TickManager.TicksGame;
-            
-            if (Prefs.DevMode)
-            {
-                Log.Message($"[Riminder] Reminder triggered: {GetLabel()}, frequency={frequency}");
-            }
 
             Find.LetterStack.ReceiveLetter(
                 "Reminder: " + GetLabel(),
@@ -77,12 +72,8 @@ namespace Riminder
                 return;
             }
 
-            // For recurring reminders, we need to:
-            // 1. Update lastTriggerTick to current tick
-            // 2. Calculate new trigger time based on interval
             lastTriggerTick = currentTick;
             
-            // RescheduleNext also sets lastTriggerTick again just to be safe
             RescheduleNext();
         }
 
@@ -90,7 +81,6 @@ namespace Riminder
         {
             int currentTick = Find.TickManager.TicksGame;
             
-            // For recurring reminders, the startpoint for progress should ALWAYS be now
             lastTriggerTick = currentTick;
 
             switch (frequency)
@@ -105,26 +95,19 @@ namespace Riminder
                     triggerTick = currentTick + GenDate.TicksPerYear;
                     break;
                 case ReminderFrequency.Custom:
-                    // For custom reminders, use the recurrenceInterval field for the interval in ticks
                     int interval = recurrenceInterval;
-                    if (interval <= 0) // Fallback in case something went wrong
+                    if (interval <= 0) 
                     {
                         interval = triggerTick - currentTick;
                         if (interval <= 0)
-                            interval = GenDate.TicksPerDay; // Default to 1 day
+                            interval = GenDate.TicksPerDay; 
                     }
                     triggerTick = currentTick + interval;
                     break;
             }
-            
-            if (Prefs.DevMode)
-            {
-                Log.Message($"[Riminder] Rescheduled {GetLabel()}: lastTriggerTick={lastTriggerTick}, " +
-                           $"triggerTick={triggerTick}, interval={(triggerTick - lastTriggerTick)} ticks");
-            }
         }
 
-        // Method delegations to data provider
+        
         public virtual string GetLabel() => dataProvider?.GetLabel() ?? "Unknown";
         public virtual string GetDescription() => dataProvider?.GetDescription() ?? "No description";
         public virtual string GetTimeLeftString() => dataProvider?.GetTimeLeftString() ?? DefaultTimeLeftString();
@@ -191,35 +174,35 @@ namespace Riminder
         {
             int currentTick = Find.TickManager.TicksGame;
             
-            // If deadline has passed, return 100% progress
+            
             if (currentTick >= triggerTick) return 1f;
             
-            // Always calculate from lastTriggerTick to triggerTick
+            
             int startTick = lastTriggerTick;
             int endTick = triggerTick;
             
-            // Sanity check: If start is after current time, use current time
+            
             if (startTick > currentTick)
             {
                 startTick = currentTick;
             }
             
-            // If start and end are the same, return 0 progress to avoid division by zero
+            
             if (endTick <= startTick) 
             {
                 return 0f;
             }
             
-            // Calculate progress as percentage of time elapsed from start to now, relative to total duration
+            
             float progress = (float)(currentTick - startTick) / (endTick - startTick);
             
-            // Ensure progress is between 0 and 1
+            
             return Mathf.Clamp01(progress);
         }
 
         public virtual void OpenEditDialog()
         {
-            // Implement in concrete classes or create a factory pattern
+            
         }
 
         public string GetFrequencyDisplayString()
@@ -235,7 +218,7 @@ namespace Riminder
                 case ReminderFrequency.Years:
                     return "Years";
                 case ReminderFrequency.Custom:
-                    // Check if there's a recurrence description
+                    
                     if (this is Reminder reminderObj && 
                         reminderObj.metadata != null && 
                         reminderObj.metadata.TryGetValue("recurrenceDescription", out string description))

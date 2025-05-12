@@ -130,12 +130,12 @@ namespace Riminder
 
         private void CreateTendReminder(Pawn pawn, Hediff hediff)
         {
-            // Strictly enforce one TendReminder per pawn
+            
             var allTendReminders = RiminderManager.GetActiveReminders().OfType<TendReminder>().ToList();
             var existing = allTendReminders.FirstOrDefault(r => r.FindPawn() == pawn);
             if (existing != null)
             {
-                // Add the new hediff to the tracked list if not already present
+                
                 if (existing.dataProvider is TendReminderDataProvider provider)
                 {
                     string id = hediff.loadID > 0 ? hediff.loadID.ToString() : $"{pawn.ThingID}_{hediff.def.defName}_{(hediff.Part != null ? hediff.Part.def.defName : "null")}";
@@ -147,7 +147,7 @@ namespace Riminder
                 }
                 return;
             }
-            // Otherwise, create a new consolidated reminder for this pawn
+            
             var reminder = ReminderFactory.CreateTendReminder(pawn, hediff, hediff is HediffWithComps hwc && hwc.TryGetComp<HediffComp_Immunizable>() != null);
             if (reminder != null)
             {

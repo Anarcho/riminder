@@ -93,8 +93,8 @@ namespace Riminder
                             {
                                 reminder.Trigger();
                                 
-                                // Force a UI refresh after triggering a reminder
-                                // This is critical for progress bars to reset properly
+                                
+                                
                                 RefreshOpenDialogs();
                             }
                             catch (Exception ex)
@@ -205,12 +205,12 @@ namespace Riminder
 
         private static bool ShouldShowReminder(BaseReminder reminder)
         {
-            // Check if this is a tend reminder
+            
             bool isTendReminder = reminder is TendReminder || 
                                 reminder.GetLabel().StartsWith("Tend ") || 
                                 reminder.frequency == ReminderFrequency.WhenTendingRequired;
                                 
-            // Check if reminders are enabled for this type
+            
             if (isTendReminder)
                 return RiminderMod.Settings.enableTendReminders;
             else
@@ -227,7 +227,7 @@ namespace Riminder
             
             try
             {
-                // Only return tend reminders if the setting is enabled
+                
                 if (!RiminderMod.Settings.enableTendReminders)
                     return new List<BaseReminder>();
                     
@@ -308,15 +308,6 @@ namespace Riminder
                             {
                                 reminders.RemoveAt(i);
                             }
-                            else if (Prefs.DevMode)
-                            {
-                                // Debug check to verify lastTriggerTick values
-                                Log.Message($"[Riminder] Loaded reminder: {reminders[i].GetLabel()}, " +
-                                          $"frequency={reminders[i].frequency}, " +
-                                          $"lastTriggerTick={reminders[i].lastTriggerTick}, " +
-                                          $"createdTick={reminders[i].createdTick}, " +
-                                          $"triggerTick={reminders[i].triggerTick}");
-                            }
                         }
                         RemoveDuplicateTendReminders();
                     }
@@ -380,10 +371,10 @@ namespace Riminder
                 
                 foreach (var reminder in tendReminders)
                 {
-                    // Refresh the data provider
+                    
                     reminder.dataProvider?.Refresh();
                     
-                    // Check if conditions are still valid
+                    
                     if (reminder.ShouldComplete())
                     {
                         reminder.completed = true;

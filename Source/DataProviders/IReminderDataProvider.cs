@@ -12,7 +12,7 @@ namespace Riminder
         bool NeedsAttention();
         void Refresh();
         
-        // Helper methods for saving/loading
+        
         void ExposeData();
     }
 } 

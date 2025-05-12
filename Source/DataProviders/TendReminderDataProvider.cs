@@ -18,20 +18,20 @@ namespace Riminder
 
     public class TendReminderDataProvider : IExposable, IReminderDataProvider
     {
-        // Data that is saved/loaded
+        
         public string pawnId;
         public string pawnLabel;
         public List<string> trackedHediffIds = new List<string>();
         public bool removeOnImmunity;
         
-        // Cached data from last refresh
+        
         private string label;
         private string description;
         private string timeLeftString = "Now";
         private float progress;
         private bool needsAttention;
         
-        // Internal calculations
+        
         private int tendTicksLeft = -1;
         private int nextTendableInTicks = -1;
         private float tendQuality;
@@ -51,7 +51,7 @@ namespace Riminder
             this.pawnLabel = pawn.LabelShort;
             this.removeOnImmunity = removeOnImmunity;
             
-            // Track all tendable hediffs
+            
             foreach (var hediff in hediffs)
             {
                 if (hediff is HediffWithComps hwc && hwc.TryGetComp<HediffComp_TendDuration>() != null)
@@ -73,7 +73,7 @@ namespace Riminder
             Scribe_Values.Look(ref removeOnImmunity, "removeOnImmunity", false);
             Scribe_Collections.Look(ref trackedHediffIds, "trackedHediffIds", LookMode.Value);
             
-            // Don't save cached data, it will be recalculated on load
+            
         }
 
         public string GetLabel() => label;
@@ -111,7 +111,7 @@ namespace Riminder
                              (h.Part != null && h.Part.def.defName == partDefName)));
                     }
                 }
-                // Exclude missing limbs, non-tendable, permanent, and already-tended permanent hediffs
+                
                 bool shouldTrack = false;
                 if (found != null && found.def.tendable && !found.IsPermanent() && !found.def.defName.Contains("Missing") && !found.Label.ToLower().Contains("missing") && !found.def.defName.Contains("Removed") && !found.Label.ToLower().Contains("removed"))
                 {
@@ -120,7 +120,6 @@ namespace Riminder
                         var tendComp = hwc.TryGetComp<HediffComp_TendDuration>();
                         if (tendComp != null)
                         {
-                            // If permanent-tend and already tended, skip
                             if (tendComp.TProps.TendIsPermanent && tendComp.IsTended)
                             {
                                 shouldTrack = false;
@@ -162,55 +161,52 @@ namespace Riminder
                     trackedHediffIds.Remove(id);
                 }
             }
-            // Remove the reminder if no valid tendable hediffs remain
+            
             if (trackedHediffs.Count == 0)
             {
                 RiminderManager.RemoveReminderForPawn(pawnId);
                 return;
             }
-            // Group by defName + partDefName and keep only the most urgent (lowest tendTicksLeft) for each unique instance
+            
             var grouped = trackedHediffs
                 .GroupBy(x => x.Hediff.def.defName + "_" + (x.Hediff.Part != null ? x.Hediff.Part.def.defName : "null"))
                 .Select(g => g.OrderBy(x => x.TendTicksLeft).First())
                 .ToList();
             if (grouped.Count == 0)
             {
-                // No more valid tendable hediffs, mark reminder as complete and remove
                 RiminderManager.RemoveReminderForPawn(pawnId);
                 return;
             }
-            // Prioritize: TendPriority > bleeding > acute immunizable disease > other immunizable disease > chronic > other
+            
             var urgentInfo = grouped
                 .OrderByDescending(x => {
-                    // First prioritize hediffs that actually need tending now
                     if (x.Hediff is HediffWithComps hwc)
                     {
                         var tendComp = hwc.TryGetComp<HediffComp_TendDuration>();
                         if (tendComp != null)
                         {
-                            // If not tended or ready to tend again, highest priority
                             return tendComp.IsTended ? 
                                 (tendComp.tendTicksLeft <= tendComp.TProps.TendTicksOverlap ? 2 : 0) : 
-                                3; // Not tended at all = highest priority (3)
+                                3; 
                         }
                     }
-                    // Bleeding injuries always need tending
+                    
                     if (x.IsBleeding) return 3;
-                    return 0; // Doesn't need immediate tending
+                    return 0; 
                 })
                 .ThenByDescending(x => x.Hediff.TendPriority)
                 .ThenByDescending(x => x.IsBleeding)
-                .ThenByDescending(x => x.IsDisease && !x.IsChronic) // acute immunizable
-                .ThenByDescending(x => x.IsDisease) // any immunizable
-                .ThenByDescending(x => !x.IsChronic) // non-chronic before chronic
+                .ThenByDescending(x => x.IsDisease && !x.IsChronic) 
+                .ThenByDescending(x => x.IsDisease) 
+                .ThenByDescending(x => !x.IsChronic) 
                 .ThenBy(x => x.TendTicksLeft)
                 .FirstOrDefault();
             Hediff urgent = urgentInfo?.Hediff;
-            // Update tracked hediffs
+            
             UpdateTrackedHediffs(pawn);
-            // Calculate all the values in one place
+            
             CalculateValues(pawn, urgent);
-            // Format everything
+            
             FormatOutputs(pawn, urgent);
         }
         
@@ -225,17 +221,17 @@ namespace Riminder
         
         private void CalculateValues(Pawn pawn, Hediff hediff)
         {
-            // Reset values
+            
             tendTicksLeft = -1;
             nextTendableInTicks = -1;
             tendQuality = 0f;
             needsAttention = false;
             
-            // Get labels for later use
+            
             hediffLabel = hediff.LabelCap;
             hediffDefLabel = hediff.def.label;
             
-            // Handle bleeding injuries
+            
             if (hediff is Hediff_Injury injury && injury.Bleeding)
             {
                 needsAttention = true;
@@ -245,7 +241,7 @@ namespace Riminder
                 return;
             }
             
-            // Get tend info if available
+            
             if (hediff is HediffWithComps hwc)
             {
                 var tendComp = hwc.TryGetComp<HediffComp_TendDuration>();
@@ -254,78 +250,63 @@ namespace Riminder
                     tendTicksLeft = tendComp.tendTicksLeft;
                     tendQuality = tendComp.tendQuality;
                     
-                    // Apply the same calculation used in the game
+                    
                     nextTendableInTicks = tendTicksLeft > 0 ? 
                         tendTicksLeft - tendComp.TProps.TendTicksOverlap : 0;
                         
-                    // Determine if needs attention - FIX: Only set to true if it actually needs tending now
+                    
                     needsAttention = !tendComp.IsTended || nextTendableInTicks <= 0;
                     
-                    // Use the unified progress calculation
+                    
                     progress = CalculateHediffProgress(hediff, tendComp);
                 }
             }
         }
         
-        // Utility method for consistent progress calculation
+        
         public static float CalculateHediffProgress(Hediff hediff, HediffComp_TendDuration tendComp)
         {
-            // If not tended or no tend ticks left, progress is 100%
-            if (tendComp == null || !tendComp.IsTended || tendComp.tendTicksLeft <= 0)
+            
+            if (tendComp == null || !tendComp.IsTended)
                 return 1f;
-                
-            float progress;
             
-            if (hediff.def.chronic)
+            
+            if (hediff is Hediff_Injury injury && injury.Bleeding)
+                return 1f;
+            
+            
+            int currentTick = Find.TickManager.TicksGame;
+            
+            
+            int totalDuration = tendComp.TProps.TendTicksFull;
+            
+            
+            if (tendComp.TProps.TendTicksOverlap > 0)
             {
-                // Standard duration reference - one game day
-                int standardDuration = GenDate.TicksPerDay;
-                
-                // For chronic conditions, use a fixed scale approach instead of fluctuating percentage
-                if (tendComp.tendTicksLeft > standardDuration)
-                {
-                    // Scale from 0.1 to 0.9 based on days left
-                    float daysLeft = tendComp.tendTicksLeft / (float)standardDuration;
-                    float maxDays = 10f; // Cap at 10 days
-                    
-                    // Inverted logarithmic scale for more stable display
-                    // This gives diminishing changes as days increase
-                    daysLeft = Math.Min(daysLeft, maxDays);
-                    progress = 0.9f - (0.8f * (daysLeft / maxDays));
-                }
-                else
-                {
-                    // Normal linear progress for the final day
-                    progress = 0.9f - (0.8f * tendComp.tendTicksLeft / (float)standardDuration);
-                }
-            }
-            else
-            {
-                // For non-chronic conditions, use standard linear progress
-                int baseTendDuration = GenDate.TicksPerDay;
-                
-                // Adjust for tend props if available
-                if (tendComp.TProps != null && tendComp.TProps.TendTicksOverlap > 0)
-                {
-                    baseTendDuration = Math.Max(baseTendDuration - tendComp.TProps.TendTicksOverlap, GenDate.TicksPerHour * 4);
-                }
-                
-                progress = 1f - (float)tendComp.tendTicksLeft / baseTendDuration;
+                totalDuration = Math.Max(totalDuration - tendComp.TProps.TendTicksOverlap, GenDate.TicksPerHour * 4);
             }
             
-            // Ensure progress stays in valid range
+            
+            int timeRemaining = tendComp.tendTicksLeft;
+            
+            
+            
+            
+            float progress = 1f - (Math.Max(0, timeRemaining) / (float)totalDuration);
+            
+            
             return Math.Max(0f, Math.Min(1f, progress));
         }
         
         private void FormatOutputs(Pawn pawn, Hediff hediff)
         {
-            // Format label
+            
             label = $"Tend {pawnLabel}'s {hediffLabel}";
             
-            // Format description
+            
             description = FormatDescription(pawn, hediff);
             
-            // Format time left
+            
             if (needsAttention)
             {
                 timeLeftString = "Now";
@@ -344,7 +325,7 @@ namespace Riminder
         {
             string desc = $"{pawnLabel}'s {hediffLabel} ({hediffDefLabel})";
             
-            // Add tending info
+            
             if (tendTicksLeft == -1)
             {
                 desc += "\nNeeds tending now!";
@@ -362,15 +343,15 @@ namespace Riminder
                 }
             }
             
-            // Add immunity info if applicable
+            
             if (hediff is HediffWithComps hwc)
             {
-                // For chronic diseases, show severity per day
+                
                 if (hediff.def.chronic)
                 {
                     bool severityDisplayed = false;
                     
-                    // First try to get HediffComp_SeverityPerDay
+                    
                     var severityComp = hwc.TryGetComp<HediffComp_SeverityPerDay>();
                     if (severityComp != null)
                     {
@@ -381,7 +362,7 @@ namespace Riminder
                         severityDisplayed = true;
                     }
                     
-                    // Also try for HediffComp_SeverityModifierBase which might be used instead
+                    
                     if (!severityDisplayed)
                     {
                         var allComps = hwc.comps;
@@ -402,7 +383,7 @@ namespace Riminder
                         }
                     }
                 }
-                // Only show immunity for non-chronic diseases
+                
                 else
                 {
                     var immComp = hwc.TryGetComp<HediffComp_Immunizable>();
@@ -418,7 +399,7 @@ namespace Riminder
                 }
             }
             
-            // Add bleeding info if applicable
+            
             if (hediff is Hediff_Injury injury && injury.Bleeding)
             {
                 int ticksUntilDeath = HealthUtility.TicksUntilDeathDueToBloodLoss(pawn);
@@ -435,19 +416,19 @@ namespace Riminder
         {
             if (pawn?.health?.hediffSet == null) return null;
             
-            // First get all tracked hediffs
+            
             var trackedHediffs = new List<Hediff>();
             foreach (string id in trackedHediffIds.ToList())
             {
                 Hediff found = null;
                 if (long.TryParse(id, out long loadId))
                 {
-                    // Find hediff by load ID directly instead of using the extension method
+                    
                     found = pawn.health.hediffSet.hediffs.FirstOrDefault(h => h.loadID == loadId);
                 }
                 else
                 {
-                    // Try parsing the composite ID format
+                    
                     string[] parts = id.Split('_');
                     if (parts.Length >= 2)
                     {
@@ -467,18 +448,18 @@ namespace Riminder
                 }
                 else
                 {
-                    // Remove IDs that no longer exist
+                    
                     trackedHediffIds.Remove(id);
                 }
             }
             
             if (trackedHediffs.Count == 0) return null;
             
-            // First check for bleeding injuries
+            
             var bleeding = trackedHediffs.FirstOrDefault(h => h is Hediff_Injury injury && injury.Bleeding);
             if (bleeding != null) return bleeding;
             
-            // Then check for other tendable conditions
+            
             return trackedHediffs
                 .Where(h => h is HediffWithComps hwc && hwc.TryGetComp<HediffComp_TendDuration>() != null)
                 .OrderBy(h => {

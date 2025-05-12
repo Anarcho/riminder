@@ -57,7 +57,7 @@ namespace Riminder
         {
             if (dismissed) return;
 
-            // Check if alerts are enabled for normal reminders
+            
             if (RiminderMod.Settings.showNotifications && RiminderMod.Settings.enableNormalAlerts)
             {
                 Find.LetterStack.ReceiveLetter(
@@ -91,7 +91,7 @@ namespace Riminder
         {
             float progress = DefaultProgressValue();
             
-            // Always log in dev mode to track progress calculation
+            
             if (Prefs.DevMode)
             {
                 int currentTick = Find.TickManager.TicksGame;

@@ -10,26 +10,31 @@ namespace Riminder
     {
         private string label = "";
         private string description = "";
-        private int days = 0;
-        private int hours = 0;
         private ReminderFrequency selectedFrequency = ReminderFrequency.OneTime;
         
-        // Complex recurrence values
+        
         private int recurrenceHours = 0;
         private int recurrenceDays = 0;
         private int recurrenceQuadrums = 0;
         private int recurrenceYears = 0;
         
-        // Use the same controls for one-time reminders
         private int oneTimeHours = 0;
         private int oneTimeDays = 0;
         private int oneTimeQuadrums = 0;
         private int oneTimeYears = 0;
         
-        private const float LeftMargin = 20f;
-        private const float ControlHeight = 30f;
-        private const float SmallButtonSize = 25f;
-        private const float ButtonGap = 5f;
+        
+        private int offsetHours = 0;
+        private int offsetDays = 0;
+        
+        
+        private string hoursBuffer = "0";
+        private string daysBuffer = "0";
+        private string quadrumsBuffer = "0";
+        private string yearsBuffer = "0";
+        
+        private string offsetHoursBuffer = "0";
+        private string offsetDaysBuffer = "0";
         
         public Dialog_CreateReminder()
         {
@@ -41,144 +46,76 @@ namespace Riminder
             preventCameraMotion = false;
         }
 
-        public override Vector2 InitialSize => new Vector2(500f, 600f);
+        public override Vector2 InitialSize => new Vector2(600f, 650f);
 
         public override void DoWindowContents(Rect inRect)
         {
             bool originalWordWrap = Text.WordWrap;
+            Text.WordWrap = true;
             
             try
             {
-                float contentWidth = inRect.width - 40f;
+                float contentWidth = inRect.width - (RiminderUIHelper.LeftMargin * 2);
                 float currentY = 10f;
                 
-                Text.Font = GameFont.Medium;
+                
+                RiminderUIHelper.DrawSectionHeader(0, currentY, inRect.width, "Create Reminder");
+                currentY += RiminderUIHelper.RowHeight + RiminderUIHelper.SectionSpacing;
+                
+                
+                RiminderUIHelper.DrawLabeledTextField(RiminderUIHelper.LeftMargin, currentY, contentWidth, "Title:", ref label, labelWidthOverride: 140f, inputWidthOverride: contentWidth - 140f + 40f, inputXOffset: -70f);
+                currentY += RiminderUIHelper.RowHeight + RiminderUIHelper.SectionSpacing;
+                
+                
+                RiminderUIHelper.DrawLabeledTextArea(RiminderUIHelper.LeftMargin, currentY, contentWidth, "Desc:", ref description, 60f, labelWidthOverride: 140f, inputWidthOverride: contentWidth - 140f + 40f, inputXOffset: -70f);
+                currentY += 60f + RiminderUIHelper.SectionSpacing;
+                
+                
+                RiminderUIHelper.DrawSectionHeader(RiminderUIHelper.LeftMargin, currentY, contentWidth, "Frequency");
+                currentY += RiminderUIHelper.RowHeight + RiminderUIHelper.SectionSpacing;
+                
+                RiminderUIHelper.DrawFrequencySelector(RiminderUIHelper.LeftMargin, currentY, contentWidth, ref selectedFrequency);
+                currentY += RiminderUIHelper.RowHeight + RiminderUIHelper.SectionSpacing;
+                
+                
+                string timeHeader = selectedFrequency == ReminderFrequency.OneTime ? "Trigger Time" : "Repeat Every";
+                RiminderUIHelper.DrawSectionHeader(RiminderUIHelper.LeftMargin, currentY, contentWidth, timeHeader);
+                currentY += RiminderUIHelper.RowHeight + RiminderUIHelper.SectionSpacing;
+                
+                DrawTimeControls(currentY, contentWidth);
+                currentY += (RiminderUIHelper.RowHeight + RiminderUIHelper.Gap) * 2 + RiminderUIHelper.SectionSpacing;
+                
+                
+                RiminderUIHelper.DrawSectionHeader(RiminderUIHelper.LeftMargin, currentY, contentWidth, "Starting Offset");
+                currentY += RiminderUIHelper.RowHeight + RiminderUIHelper.SectionSpacing;
+                
+                DrawOffsetControls(currentY, contentWidth);
+                currentY += RiminderUIHelper.RowHeight + RiminderUIHelper.SectionSpacing;
+                
+                
+                string summaryText = selectedFrequency == ReminderFrequency.OneTime
+                    ? "Triggers in " + FormatOneTimeInterval()
+                    : "Repeats every " + FormatRecurrenceInterval();
+                    
+                Rect summaryRect = new Rect(RiminderUIHelper.LeftMargin, currentY, contentWidth, RiminderUIHelper.RowHeight);
+                Widgets.DrawBoxSolid(summaryRect, new Color(0.2f, 0.2f, 0.2f, 0.3f));
+                
+                var prevAnchor = Text.Anchor;
                 Text.Anchor = TextAnchor.MiddleCenter;
-                Widgets.Label(new Rect(0, currentY, inRect.width, ControlHeight), "Create Reminder");
-                Text.Anchor = TextAnchor.UpperLeft;
-                Text.Font = GameFont.Small;
-                currentY += ControlHeight + 15f;
+                GUI.color = selectedFrequency == ReminderFrequency.OneTime ? Color.yellow : Color.green;
+                Widgets.Label(summaryRect, summaryText);
+                GUI.color = Color.white;
+                Text.Anchor = prevAnchor;
                 
-                Rect titleLabelRect = new Rect(LeftMargin, currentY, 60f, ControlHeight);
-                Widgets.Label(titleLabelRect, "Title:");
                 
-                Rect titleRect = new Rect(LeftMargin + 60f, currentY, contentWidth - 60f, ControlHeight);
-                label = Widgets.TextField(titleRect, label);
-                currentY += ControlHeight + 15f;
+                RiminderUIHelper.DrawBottomButtons(inRect, "Cancel", "Create", out bool cancelClicked, out bool createClicked);
                 
-                Rect descLabelRect = new Rect(LeftMargin, currentY, 60f, ControlHeight);
-                Widgets.Label(descLabelRect, "Desc:");
-                
-                Rect descRect = new Rect(LeftMargin + 60f, currentY, contentWidth - 60f, 60f);
-                description = Widgets.TextArea(descRect, description);
-                currentY += 60f + 15f;
-                
-                Text.Font = GameFont.Medium;
-                Text.Anchor = TextAnchor.MiddleCenter;
-                Widgets.Label(new Rect(LeftMargin, currentY, contentWidth, ControlHeight), "Frequency");
-                Text.Anchor = TextAnchor.UpperLeft;
-                Text.Font = GameFont.Small;
-                currentY += ControlHeight + 15f;
-                
-                // Simplified frequency options
-                float row1Y = currentY;
-                
-                // One Time Option (Left)
-                Rect oneTimeRect = new Rect(inRect.width / 4 - 80f, row1Y, 80f, ControlHeight);
-                Widgets.Label(oneTimeRect, "One Time");
-                Rect oneTimeRadioRect = new Rect(oneTimeRect.xMax + 5f, row1Y, 24f, 24f);
-                bool oneTimeSelected = selectedFrequency == ReminderFrequency.OneTime;
-                Widgets.RadioButton(oneTimeRadioRect.position, oneTimeSelected);
-                if (Widgets.ButtonInvisible(new Rect(oneTimeRect.x, row1Y, oneTimeRadioRect.xMax - oneTimeRect.x, ControlHeight), true) || 
-                    Mouse.IsOver(oneTimeRadioRect) && Input.GetMouseButtonDown(0))
-                {
-                    selectedFrequency = ReminderFrequency.OneTime;
-                }
-                
-                // Repeated Option (Right)
-                Rect repeatedRect = new Rect(inRect.width * 3/4 - 80f, row1Y, 80f, ControlHeight);
-                Widgets.Label(repeatedRect, "Repeated");
-                Rect repeatedRadioRect = new Rect(repeatedRect.xMax + 5f, row1Y, 24f, 24f);
-                bool repeatedSelected = selectedFrequency == ReminderFrequency.Custom;
-                Widgets.RadioButton(repeatedRadioRect.position, repeatedSelected);
-                if (Widgets.ButtonInvisible(new Rect(repeatedRect.x, row1Y, repeatedRadioRect.xMax - repeatedRect.x, ControlHeight), true) || 
-                    Mouse.IsOver(repeatedRadioRect) && Input.GetMouseButtonDown(0))
-                {
-                    selectedFrequency = ReminderFrequency.Custom;
-                }
-                
-                currentY += ControlHeight + 25f;
-                
-                // Draw the title for time options section
-                Text.Font = GameFont.Medium;
-                Text.Anchor = TextAnchor.MiddleCenter;
-                
-                if (selectedFrequency == ReminderFrequency.OneTime)
-                {
-                    Widgets.Label(new Rect(LeftMargin, currentY, contentWidth, ControlHeight), "Trigger Time");
-                }
-                else if (selectedFrequency == ReminderFrequency.Custom)
-                {
-                    Widgets.Label(new Rect(LeftMargin, currentY, contentWidth, ControlHeight), "Repeat Every");
-                }
-                
-                Text.Anchor = TextAnchor.UpperLeft;
-                Text.Font = GameFont.Small;
-                currentY += ControlHeight + 15f;
-                
-                if (selectedFrequency == ReminderFrequency.OneTime)
-                {
-                    // Use the same multi-unit controls for one-time reminders
-                    DrawMultiUnitTimeControls(currentY, contentWidth, true);
-                    currentY += ControlHeight * 2 + 30f;
-                    
-                    // Visual feedback for one-time reminder
-                    Text.Font = GameFont.Small;
-                    string timeString = FormatOneTimeInterval();
-                    Rect intervalRect = new Rect(LeftMargin, currentY, contentWidth, ControlHeight);
-                    
-                    // Make this stand out visually
-                    Widgets.DrawBoxSolid(intervalRect, new Color(0.2f, 0.2f, 0.2f, 0.3f));
-                    Text.Anchor = TextAnchor.MiddleCenter;
-                    GUI.color = Color.yellow;
-                    Widgets.Label(intervalRect, "Triggers in " + timeString);
-                    GUI.color = Color.white;
-                    Text.Anchor = TextAnchor.UpperLeft;
-                    
-                    currentY += ControlHeight + 20f;
-                }
-                else if (selectedFrequency == ReminderFrequency.Custom)
-                {
-                    // Multi-unit recurrence controls
-                    DrawMultiUnitTimeControls(currentY, contentWidth, false);
-                    currentY += ControlHeight * 2 + 30f;
-                    
-                    // Visual feedback for custom frequency - moved down after all controls
-                    Text.Font = GameFont.Small;
-                    string intervalString = FormatRecurrenceInterval();
-                    Rect intervalRect = new Rect(LeftMargin, currentY, contentWidth, ControlHeight);
-                    
-                    // Make this stand out visually
-                    Widgets.DrawBoxSolid(intervalRect, new Color(0.2f, 0.2f, 0.2f, 0.3f));
-                    Text.Anchor = TextAnchor.MiddleCenter;
-                    GUI.color = Color.green;
-                    Widgets.Label(intervalRect, "Repeats every " + intervalString);
-                    GUI.color = Color.white;
-                    Text.Anchor = TextAnchor.UpperLeft;
-                    
-                    currentY += ControlHeight + 20f;
-                }
-                
-                float bottomY = inRect.height - 45f;
-                float buttonWidth = 120f;
-                float buttonHeight = 40f;
-                
-                if (Widgets.ButtonText(new Rect(inRect.width / 2 - buttonWidth - 10f, bottomY, buttonWidth, buttonHeight), "Cancel"))
+                if (cancelClicked)
                 {
                     Close();
                 }
                 
-                if (Widgets.ButtonText(new Rect(inRect.width / 2 + 10f, bottomY, buttonWidth, buttonHeight), "Create"))
+                if (createClicked)
                 {
                     TryCreateReminder();
                 }
@@ -190,123 +127,76 @@ namespace Riminder
             }
         }
 
-        private void DrawMultiUnitTimeControls(float yPos, float contentWidth, bool isOneTime)
+        private void DrawTimeControls(float yPos, float contentWidth)
         {
+            bool isOneTime = selectedFrequency == ReminderFrequency.OneTime;
             float currentY = yPos;
-            float controlWidth = contentWidth / 2 - 10f;
             
-            // Years
-            Rect yearsLabelRect = new Rect(LeftMargin, currentY + 2f, 80f, ControlHeight);
-            Widgets.Label(yearsLabelRect, "Years:");
             
-            if (Widgets.ButtonText(new Rect(LeftMargin + 90f, currentY, SmallButtonSize, ControlHeight), "-"))
-            {
-                if (isOneTime)
-                    oneTimeYears = Math.Max(0, oneTimeYears - 1);
-                else
-                    recurrenceYears = Math.Max(0, recurrenceYears - 1);
-            }
+            float col1X = RiminderUIHelper.LeftMargin;
+            float col2X = col1X + RiminderUIHelper.ControlGroupWidth + RiminderUIHelper.Gap * 4;
             
-            Rect yearsValueRect = new Rect(LeftMargin + 90f + SmallButtonSize + 8f, currentY + 2f, 30f, ControlHeight);
-            Widgets.Label(yearsValueRect, isOneTime ? oneTimeYears.ToString() : recurrenceYears.ToString());
             
-            if (Widgets.ButtonText(new Rect(yearsValueRect.xMax + 8f, currentY, SmallButtonSize, ControlHeight), "+"))
-            {
-                if (isOneTime)
-                    oneTimeYears += 1;
-                else
-                    recurrenceYears += 1;
-            }
+            RiminderUIHelper.DrawLabeledIntRow(
+                col1X, currentY,
+                "Hours:",
+                ref (isOneTime ? ref oneTimeHours : ref recurrenceHours),
+                ref hoursBuffer,
+                0, 23);
+                
+            RiminderUIHelper.DrawLabeledIntRow(
+                col2X, currentY,
+                "Days:",
+                ref (isOneTime ? ref oneTimeDays : ref recurrenceDays),
+                ref daysBuffer);
+                
+            currentY += RiminderUIHelper.RowHeight + RiminderUIHelper.Gap;
             
-            // Quadrums
-            Rect quadrumsLabelRect = new Rect(LeftMargin + contentWidth/2, currentY + 2f, 70f, ControlHeight);
-            Widgets.Label(quadrumsLabelRect, "Quadrums:");
             
-            if (Widgets.ButtonText(new Rect(quadrumsLabelRect.xMax + 10f, currentY, SmallButtonSize, ControlHeight), "-"))
-            {
-                if (isOneTime)
-                    oneTimeQuadrums = Math.Max(0, oneTimeQuadrums - 1);
-                else
-                    recurrenceQuadrums = Math.Max(0, recurrenceQuadrums - 1);
-            }
-            
-            Rect quadrumsValueRect = new Rect(quadrumsLabelRect.xMax + 10f + SmallButtonSize + 8f, currentY + 2f, 30f, ControlHeight);
-            Widgets.Label(quadrumsValueRect, isOneTime ? oneTimeQuadrums.ToString() : recurrenceQuadrums.ToString());
-            
-            if (Widgets.ButtonText(new Rect(quadrumsValueRect.xMax + 8f, currentY, SmallButtonSize, ControlHeight), "+"))
-            {
-                if (isOneTime)
-                    oneTimeQuadrums = (oneTimeQuadrums + 1) % 5;
-                else
-                    recurrenceQuadrums = (recurrenceQuadrums + 1) % 5;
-            }
-            
-            currentY += ControlHeight + 10f;
-            
-            // Days
-            Rect daysLabelRect = new Rect(LeftMargin, currentY + 2f, 80f, ControlHeight);
-            Widgets.Label(daysLabelRect, "Days:");
-            
-            if (Widgets.ButtonText(new Rect(LeftMargin + 90f, currentY, SmallButtonSize, ControlHeight), "-"))
-            {
-                if (isOneTime)
-                    oneTimeDays = Math.Max(0, oneTimeDays - 1);
-                else
-                    recurrenceDays = Math.Max(0, recurrenceDays - 1);
-            }
-            
-            Rect daysValueRect = new Rect(LeftMargin + 90f + SmallButtonSize + 8f, currentY + 2f, 30f, ControlHeight);
-            Widgets.Label(daysValueRect, isOneTime ? oneTimeDays.ToString() : recurrenceDays.ToString());
-            
-            if (Widgets.ButtonText(new Rect(daysValueRect.xMax + 8f, currentY, SmallButtonSize, ControlHeight), "+"))
-            {
-                if (isOneTime)
-                    oneTimeDays = (oneTimeDays + 1) % 16; // Cap at 15 (one quadrum)
-                else
-                    recurrenceDays = (recurrenceDays + 1) % 16; // Cap at 15 (one quadrum)
-            }
-            
-            // Hours
-            Rect hoursLabelRect = new Rect(LeftMargin + contentWidth/2, currentY + 2f, 70f, ControlHeight);
-            Widgets.Label(hoursLabelRect, "Hours:");
-            
-            if (Widgets.ButtonText(new Rect(hoursLabelRect.xMax + 10f, currentY, SmallButtonSize, ControlHeight), "-"))
-            {
-                if (isOneTime)
-                    oneTimeHours = Math.Max(0, oneTimeHours - 1);
-                else
-                    recurrenceHours = Math.Max(0, recurrenceHours - 1);
-            }
-            
-            Rect hoursValueRect = new Rect(hoursLabelRect.xMax + 10f + SmallButtonSize + 8f, currentY + 2f, 30f, ControlHeight);
-            Widgets.Label(hoursValueRect, isOneTime ? oneTimeHours.ToString() : recurrenceHours.ToString());
-            
-            if (Widgets.ButtonText(new Rect(hoursValueRect.xMax + 8f, currentY, SmallButtonSize, ControlHeight), "+"))
-            {
-                if (isOneTime)
-                    oneTimeHours = (oneTimeHours + 1) % 24;
-                else
-                    recurrenceHours = (recurrenceHours + 1) % 24;
-            }
+            RiminderUIHelper.DrawLabeledIntRow(
+                col1X, currentY,
+                "Quadrums:",
+                ref (isOneTime ? ref oneTimeQuadrums : ref recurrenceQuadrums),
+                ref quadrumsBuffer);
+                
+            RiminderUIHelper.DrawLabeledIntRow(
+                col2X, currentY,
+                "Years:",
+                ref (isOneTime ? ref oneTimeYears : ref recurrenceYears),
+                ref yearsBuffer);
         }
         
+        private void DrawOffsetControls(float yPos, float contentWidth)
+        {
+            float col1X = RiminderUIHelper.LeftMargin;
+            float col2X = col1X + RiminderUIHelper.ControlGroupWidth + RiminderUIHelper.Gap * 4;
+            
+            RiminderUIHelper.DrawLabeledIntRow(
+                col1X, yPos,
+                "Offset Hours:",
+                ref offsetHours,
+                ref offsetHoursBuffer,
+                0, 23);
+                
+            RiminderUIHelper.DrawLabeledIntRow(
+                col2X, yPos,
+                "Offset Days:",
+                ref offsetDays,
+                ref offsetDaysBuffer);
+        }
+
         private string FormatRecurrenceInterval()
         {
             if (recurrenceYears == 0 && recurrenceQuadrums == 0 && recurrenceDays == 0 && recurrenceHours == 0)
             {
-                return "1 day"; // Default to daily if nothing is set
+                return "1 day"; 
             }
             
             List<string> parts = new List<string>();
             
-            if (recurrenceYears > 0)
+            if (recurrenceHours > 0)
             {
-                parts.Add(recurrenceYears == 1 ? "1 year" : $"{recurrenceYears} years");
-            }
-            
-            if (recurrenceQuadrums > 0)
-            {
-                parts.Add(recurrenceQuadrums == 1 ? "1 quadrum" : $"{recurrenceQuadrums} quadrums");
+                parts.Add(recurrenceHours == 1 ? "1 hour" : $"{recurrenceHours} hours");
             }
             
             if (recurrenceDays > 0)
@@ -314,12 +204,16 @@ namespace Riminder
                 parts.Add(recurrenceDays == 1 ? "1 day" : $"{recurrenceDays} days");
             }
             
-            if (recurrenceHours > 0)
+            if (recurrenceQuadrums > 0)
             {
-                parts.Add(recurrenceHours == 1 ? "1 hour" : $"{recurrenceHours} hours");
+                parts.Add(recurrenceQuadrums == 1 ? "1 quadrum" : $"{recurrenceQuadrums} quadrums");
             }
             
-            // Format as "X, Y, and Z"
+            if (recurrenceYears > 0)
+            {
+                parts.Add(recurrenceYears == 1 ? "1 year" : $"{recurrenceYears} years");
+            }
+            
             if (parts.Count == 1)
             {
                 return parts[0];
@@ -338,43 +232,19 @@ namespace Riminder
                 return result + "and " + parts[parts.Count - 1];
             }
         }
-        
-        private int GetTotalRecurrenceIntervalInTicks()
-        {
-            int totalTicks = 0;
-            
-            totalTicks += recurrenceYears * GenDate.TicksPerYear;
-            totalTicks += recurrenceQuadrums * GenDate.TicksPerQuadrum;
-            totalTicks += recurrenceDays * GenDate.TicksPerDay;
-            totalTicks += recurrenceHours * GenDate.TicksPerHour;
-            
-            // Ensure a minimum interval of 1 hour
-            if (totalTicks < GenDate.TicksPerHour)
-            {
-                totalTicks = GenDate.TicksPerHour;
-            }
-            
-            return totalTicks;
-        }
 
-        // Format one-time interval string
         private string FormatOneTimeInterval()
         {
             if (oneTimeYears == 0 && oneTimeQuadrums == 0 && oneTimeDays == 0 && oneTimeHours == 0)
             {
-                return "1 hour"; // Default to 1 hour if nothing is set
+                return "1 hour"; 
             }
             
             List<string> parts = new List<string>();
             
-            if (oneTimeYears > 0)
+            if (oneTimeHours > 0)
             {
-                parts.Add(oneTimeYears == 1 ? "1 year" : $"{oneTimeYears} years");
-            }
-            
-            if (oneTimeQuadrums > 0)
-            {
-                parts.Add(oneTimeQuadrums == 1 ? "1 quadrum" : $"{oneTimeQuadrums} quadrums");
+                parts.Add(oneTimeHours == 1 ? "1 hour" : $"{oneTimeHours} hours");
             }
             
             if (oneTimeDays > 0)
@@ -382,12 +252,16 @@ namespace Riminder
                 parts.Add(oneTimeDays == 1 ? "1 day" : $"{oneTimeDays} days");
             }
             
-            if (oneTimeHours > 0)
+            if (oneTimeQuadrums > 0)
             {
-                parts.Add(oneTimeHours == 1 ? "1 hour" : $"{oneTimeHours} hours");
+                parts.Add(oneTimeQuadrums == 1 ? "1 quadrum" : $"{oneTimeQuadrums} quadrums");
             }
             
-            // Format as "X, Y, and Z"
+            if (oneTimeYears > 0)
+            {
+                parts.Add(oneTimeYears == 1 ? "1 year" : $"{oneTimeYears} years");
+            }
+            
             if (parts.Count == 1)
             {
                 return parts[0];
@@ -405,25 +279,6 @@ namespace Riminder
                 }
                 return result + "and " + parts[parts.Count - 1];
             }
-        }
-
-        // Get total one-time interval in ticks
-        private int GetTotalOneTimeIntervalInTicks()
-        {
-            int totalTicks = 0;
-            
-            totalTicks += oneTimeYears * GenDate.TicksPerYear;
-            totalTicks += oneTimeQuadrums * GenDate.TicksPerQuadrum;
-            totalTicks += oneTimeDays * GenDate.TicksPerDay;
-            totalTicks += oneTimeHours * GenDate.TicksPerHour;
-            
-            // Ensure a minimum interval of 1 hour
-            if (totalTicks < GenDate.TicksPerHour)
-            {
-                totalTicks = GenDate.TicksPerHour;
-            }
-            
-            return totalTicks;
         }
 
         private void TryCreateReminder()
@@ -452,31 +307,22 @@ namespace Riminder
                 Messages.Message("Please specify at least one time unit for the recurrence interval", MessageTypeDefOf.RejectInput, false);
                 return;
             }
-            
-            if (selectedFrequency == ReminderFrequency.OneTime &&
-                oneTimeYears == 0 && oneTimeQuadrums == 0 && oneTimeDays == 0 && oneTimeHours == 0)
-            {
-                Messages.Message("Please specify at least one time unit for the trigger time", MessageTypeDefOf.RejectInput, false);
-                return;
-            }
 
             int triggerTick = Find.TickManager.TicksGame;
             
-            // Calculate the interval in ticks for custom reminders
+            
+            int offsetTicks = (offsetHours * GenDate.TicksPerHour) + (offsetDays * GenDate.TicksPerDay);
+            triggerTick += offsetTicks;
+            
             int customIntervalInTicks = 0;
             if (selectedFrequency == ReminderFrequency.Custom)
             {
                 customIntervalInTicks = GetTotalRecurrenceIntervalInTicks();
-                
-                // For custom frequency, we use the interval directly for the initial trigger
                 triggerTick += customIntervalInTicks;
             }
-            else // One Time
+            else 
             {
-                // Use the multi-unit time control values
                 int oneTimeIntervalInTicks = GetTotalOneTimeIntervalInTicks();
-                
-                // For one-time reminders, just add the interval to the current time
                 triggerTick += oneTimeIntervalInTicks;
             }
 
@@ -488,12 +334,10 @@ namespace Riminder
 
             var reminder = new Reminder(label, description, triggerTick, selectedFrequency);
             
-            // If this is a custom reminder, set the recurrence interval
             if (selectedFrequency == ReminderFrequency.Custom)
             {
                 reminder.recurrenceInterval = customIntervalInTicks;
                 
-                // Also store the formatted description in the reminder for better display
                 if (reminder.metadata == null)
                     reminder.metadata = new Dictionary<string, string>();
                     
@@ -505,6 +349,42 @@ namespace Riminder
             Messages.Message("Reminder created: " + label, MessageTypeDefOf.TaskCompletion, false);
 
             Close();
+        }
+
+        private int GetTotalRecurrenceIntervalInTicks()
+        {
+            int totalTicks = 0;
+            
+            totalTicks += recurrenceYears * GenDate.TicksPerYear;
+            totalTicks += recurrenceQuadrums * GenDate.TicksPerQuadrum;
+            totalTicks += recurrenceDays * GenDate.TicksPerDay;
+            totalTicks += recurrenceHours * GenDate.TicksPerHour;
+            
+            
+            if (totalTicks < GenDate.TicksPerHour)
+            {
+                totalTicks = GenDate.TicksPerHour;
+            }
+            
+            return totalTicks;
+        }
+
+        private int GetTotalOneTimeIntervalInTicks()
+        {
+            int totalTicks = 0;
+            
+            totalTicks += oneTimeYears * GenDate.TicksPerYear;
+            totalTicks += oneTimeQuadrums * GenDate.TicksPerQuadrum;
+            totalTicks += oneTimeDays * GenDate.TicksPerDay;
+            totalTicks += oneTimeHours * GenDate.TicksPerHour;
+            
+            
+            if (totalTicks < GenDate.TicksPerHour)
+            {
+                totalTicks = GenDate.TicksPerHour;
+            }
+            
+            return totalTicks;
         }
     }
 }

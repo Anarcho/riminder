@@ -64,6 +64,7 @@
     <Compile Include="Reminders\Reminder.cs" />
     
     <!-- UI -->
+    <Compile Include="UI\RiminderUIHelper.cs" />
     <Compile Include="UI\Dialog_CreateReminder.cs" />
     <Compile Include="UI\Dialog_CreateTendReminder.cs" />
     <Compile Include="UI\Dialog_EditReminder.cs" />

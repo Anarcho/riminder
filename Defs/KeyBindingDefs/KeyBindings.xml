@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Defs>
+  <KeyBindingCategoryDef>
+    <defName>Riminder</defName>
+    <label>Riminder</label>
+    <description>Keybindings for the Riminder mod.</description>
+  </KeyBindingCategoryDef>
+
+  <KeyBindingDef>
+    <defName>Riminder_OpenReminders</defName>
+    <label>Open reminders window</label>
+    <category>Riminder</category>
+    <defaultKeyCodeA>R</defaultKeyCodeA>
+    <devModeOnly>false</devModeOnly>
+  </KeyBindingDef>
+</Defs> 
