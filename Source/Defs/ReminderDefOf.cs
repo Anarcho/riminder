@@ -7,6 +7,7 @@ namespace Riminder
     public static class ReminderDefOf
     {
         public static ReminderDef TendReminder;
+        public static ReminderDef RitualReminder;
         public static KeyBindingDef Riminder_OpenReminders;
         
         static ReminderDefOf()
@@ -14,4 +15,4 @@ namespace Riminder
             DefOfHelper.EnsureInitializedInCtor(typeof(ReminderDefOf));
         }
     }
-} 
+}

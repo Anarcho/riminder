@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Verse;
 using RimWorld;
 using System.Linq;
+using Riminder;
 
 namespace Riminder
 {
@@ -78,6 +79,25 @@ namespace Riminder
                 return null;
             }
         }
+
+        public static RitualReminder CreateRitualReminder(Precept_Ritual ritual)
+        {
+            if (ritual == null) return null;
+            try
+            {
+                var reminder = new RitualReminder(ritual);
+                reminder.def = ReminderDefOf.RitualReminder;
+                return reminder;
+            }
+            catch (Exception ex)
+            {
+                if (Prefs.DevMode)
+                {
+                    Log.Error($"[Riminder] Failed to create ritual reminder: {ex}");
+                }
+                return null;
+            }
+        }
     }
     
     
@@ -95,4 +115,4 @@ namespace Riminder
             }
         }
     }
-} 
+}

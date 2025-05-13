@@ -7,6 +7,7 @@ using HarmonyLib;
 using RimWorld;
 using Verse;
 using UnityEngine;
+using Riminder;
 
 namespace Riminder
 {
@@ -617,6 +618,26 @@ namespace Riminder
                     if (Prefs.DevMode)
                     {
                         Log.Error($"[Riminder] Error in TendUtility.DoTend patch: {ex}");
+                    }
+                }
+            }
+        }
+
+        [HarmonyPatch(typeof(Precept_Ritual), nameof(Precept_Ritual.Notify_CooldownFromAbilityStarted))]
+        public static class Precept_Ritual_Notify_CooldownFromAbilityStarted_Patch
+        {
+            public static void Postfix(Precept_Ritual __instance, int cooldown)
+            {
+                
+                var reminders = RiminderManager.GetActiveReminders().OfType<RitualReminder>()
+                    .Where(r => r.RitualData?.ritualDefName == __instance.def.defName).ToList();
+                foreach (var reminder in reminders)
+                {
+                    reminder.dataProvider?.Refresh();
+                    reminder.Trigger();
+                    if (reminder.ShouldComplete())
+                    {
+                        RiminderManager.RemoveReminder(reminder.id);
                     }
                 }
             }

@@ -16,7 +16,7 @@ namespace Riminder
             Settings = GetSettings<RiminderSettings>();
             RiminderManager.Initialize();
             AutoTendReminderManager.Initialize();
-            
+            AutoRitualReminderManager.Initialize();
             
             var harmony = new Harmony("riminder.keybinds");
             harmony.PatchAll();

@@ -8,4 +8,13 @@
     <dataProviderClass>Riminder.TendReminderDataProvider</dataProviderClass>
     <canAutoCreate>true</canAutoCreate>
   </Riminder.ReminderDef>
-</Defs> 
+  <Riminder.ReminderDef>
+    <defName>RitualReminder</defName>
+    <label>Ritual Reminder</label>
+    <description>Reminds you when an ideology ritual is available or due.</description>
+    <reminderClass>Riminder.RitualReminder</reminderClass>
+    <dataProviderClass>Riminder.RitualReminderDataProvider</dataProviderClass>
+    <canAutoCreate>true</canAutoCreate>
+    <iconPath>UI/Icons/Rituals/AnytimeRitual</iconPath>
+  </Riminder.ReminderDef>
+</Defs>

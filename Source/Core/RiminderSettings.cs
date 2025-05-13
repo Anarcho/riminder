@@ -14,6 +14,7 @@ namespace Riminder
         public bool pauseOnReminder = false;
         public bool removeOnImmunity = true;
         public bool removeOnHealed = true;
+        public bool autoCreateRitualReminders = true;
         
         
         public bool enableNormalReminders = true;
@@ -83,6 +84,7 @@ namespace Riminder
             Scribe_Values.Look(ref pauseOnReminder, "pauseOnReminder", false);
             Scribe_Values.Look(ref removeOnImmunity, "removeOnImmunity", true);
             Scribe_Values.Look(ref removeOnHealed, "removeOnHealed", true);
+            Scribe_Values.Look(ref autoCreateRitualReminders, "autoCreateRitualReminders", true);
             
             
             Scribe_Values.Look(ref enableNormalReminders, "enableNormalReminders", true);

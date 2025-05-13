@@ -9,10 +9,10 @@ namespace Riminder
         public Type dataProviderClass;
         public bool canAutoCreate = false;
         public string iconPath;
-        
+
         public override string ToString()
         {
             return $"{defName} (ReminderDef)";
         }
     }
-} 
+}

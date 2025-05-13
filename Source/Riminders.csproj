@@ -49,6 +49,7 @@
     <Compile Include="Core\RiminderManager.cs" />
     <Compile Include="Core\RiminderMod.cs" />
     <Compile Include="Core\RiminderSettings.cs" />
+    <Compile Include="Core\AutoRitualReminderManager.cs" />
     
     <!-- Defs -->
     <Compile Include="Defs\ReminderDef.cs" />
@@ -57,11 +58,13 @@
     <!-- DataProviders -->
     <Compile Include="DataProviders\IReminderDataProvider.cs" />
     <Compile Include="DataProviders\TendReminderDataProvider.cs" />
+    <Compile Include="DataProviders\RitualReminderDataProvider.cs" />
     
     <!-- Reminders -->
     <Compile Include="Reminders\BaseReminder.cs" />
     <Compile Include="Reminders\TendReminder.cs" />
     <Compile Include="Reminders\Reminder.cs" />
+    <Compile Include="Reminders\RitualReminder.cs" />
     
     <!-- UI -->
     <Compile Include="UI\RiminderUIHelper.cs" />
@@ -70,6 +73,7 @@
     <Compile Include="UI\Dialog_EditReminder.cs" />
     <Compile Include="UI\Dialog_EditTendReminder.cs" />
     <Compile Include="UI\Dialog_ViewReminders.cs" />
+    <Compile Include="UI\Dialog_EditRitualReminder.cs" />
     
     <!-- Utils -->
     <Compile Include="Utils\ReminderFactory.cs" />
