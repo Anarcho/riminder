@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using System.Reflection.Emit;
 using HarmonyLib;
 using RimWorld;
 using Verse;
@@ -297,6 +296,12 @@ namespace Riminder
         [HarmonyPatch]
         public static class Pawn_HealthTracker_HealthTick_Patch
         {
+            // Cache for pawns with immunity-based reminders to avoid expensive lookups
+            private static Dictionary<string, List<TendReminder>> immunityReminderCache = new Dictionary<string, List<TendReminder>>();
+            private static int lastCacheUpdate = 0;
+            private static readonly int CACHE_UPDATE_INTERVAL = 300; // Update cache every 5 seconds
+            private static readonly int IMMUNITY_CHECK_INTERVAL = 60; // Check immunity every 60 ticks (1 second)
+
             public static MethodBase TargetMethod()
             {
                 return AccessTools.Method(typeof(Pawn_HealthTracker), "HealthTick");
@@ -304,28 +309,82 @@ namespace Riminder
 
             public static void Postfix(Pawn_HealthTracker __instance)
             {
-                var pawn = GetPawn(__instance);
-                if (pawn == null || !pawn.IsColonist) return;
-
-                var reminders = RiminderManager.GetActiveTendReminders();
-                foreach (var reminder in reminders)
+                try
                 {
+                    var pawn = GetPawn(__instance);
+                    if (pawn == null || !pawn.IsColonist) return;
+
+                    int currentTick = Find.TickManager.TicksGame;
                     
-                    if (!(reminder is TendReminder tendReminder))
-                        continue;
-                        
-                    
-                    var reminderPawn = tendReminder.FindPawn();
-                    if (reminderPawn != pawn)
-                        continue;
-                        
-                    
-                    if (tendReminder.TendData?.removeOnImmunity == true)
+                    // Only check immunity every 60 ticks to reduce performance impact
+                    if (currentTick % IMMUNITY_CHECK_INTERVAL != 0) return;
+
+                    // Update cache periodically
+                    if (currentTick - lastCacheUpdate > CACHE_UPDATE_INTERVAL)
                     {
-                        
-                        tendReminder.Trigger();
+                        UpdateImmunityReminderCache();
+                        lastCacheUpdate = currentTick;
+                    }
+
+                    string pawnId = pawn.ThingID;
+                    if (!immunityReminderCache.TryGetValue(pawnId, out var reminders) || reminders == null)
+                        return;
+
+                    // Process only cached reminders for this specific pawn
+                    foreach (var tendReminder in reminders)
+                    {
+                        if (tendReminder?.TendData?.removeOnImmunity == true)
+                        {
+                            tendReminder.Trigger();
+                        }
                     }
                 }
+                catch (Exception ex)
+                {
+                    if (Prefs.DevMode)
+                    {
+                        Log.Error($"[Riminder] Error in HealthTick patch: {ex}");
+                    }
+                }
+            }
+
+            private static void UpdateImmunityReminderCache()
+            {
+                immunityReminderCache.Clear();
+                try
+                {
+                    var allTendReminders = RiminderManager.GetActiveTendReminders();
+                    foreach (var reminder in allTendReminders)
+                    {
+                        if (reminder is TendReminder tendReminder && 
+                            tendReminder.TendData?.removeOnImmunity == true)
+                        {
+                            var pawn = tendReminder.FindPawn();
+                            if (pawn != null)
+                            {
+                                string pawnId = pawn.ThingID;
+                                if (!immunityReminderCache.ContainsKey(pawnId))
+                                {
+                                    immunityReminderCache[pawnId] = new List<TendReminder>();
+                                }
+                                immunityReminderCache[pawnId].Add(tendReminder);
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    if (Prefs.DevMode)
+                    {
+                        Log.Error($"[Riminder] Error updating immunity reminder cache: {ex}");
+                    }
+                }
+            }
+
+            public static void InvalidateCache()
+            {
+                immunityReminderCache.Clear();
+                lastCacheUpdate = 0;
             }
         }
 
@@ -657,4 +716,3 @@ namespace Riminder
         }
     }
 }
-

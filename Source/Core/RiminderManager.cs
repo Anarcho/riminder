@@ -217,6 +217,7 @@ namespace Riminder
             {
                 // Call the Harmony patch's cache invalidation method
                 HarmonyPatches.HediffComp_TendDuration_CompPostTick_Patch.InvalidateCache();
+                HarmonyPatches.Pawn_HealthTracker_HealthTick_Patch.InvalidateCache();
             }
             catch (Exception ex)
             {
