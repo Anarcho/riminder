@@ -20,13 +20,6 @@ namespace Riminder
             return (Pawn)pawnField.GetValue(healthTracker);
         }
 
-        static HarmonyPatches()
-        {
-            var harmony = new Harmony("com.riminder.patches");
-            harmony.PatchAll();
-            Log.Message("[Riminder] Harmony patches applied");
-        }
-
         [HarmonyPatch(typeof(FloatMenuMakerMap), "AddHumanlikeOrders")]
         public static class FloatMenuMakerMap_AddHumanlikeOrders_Patch
         {
