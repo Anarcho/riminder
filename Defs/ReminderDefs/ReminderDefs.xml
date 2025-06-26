@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Defs>
+  <Riminder.ReminderDef>
+    <defName>TendReminder</defName>
+    <label>Tend Reminder</label>
+    <description>Reminds you when a pawn needs tending.</description>
+    <reminderClass>Riminder.TendReminder</reminderClass>
+    <dataProviderClass>Riminder.TendReminderDataProvider</dataProviderClass>
+    <canAutoCreate>true</canAutoCreate>
+  </Riminder.ReminderDef>
+</Defs> 

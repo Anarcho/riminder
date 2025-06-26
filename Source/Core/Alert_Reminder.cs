@@ -7,7 +7,7 @@ namespace Riminder
 {
     public class Alert_Reminder : Alert
     {
-        private List<Reminder> dueReminders = new List<Reminder>();
+        private List<BaseReminder> dueReminders = new List<BaseReminder>();
 
         public Alert_Reminder()
         {
@@ -19,7 +19,7 @@ namespace Riminder
         {
             if (dueReminders.Count == 1)
             {
-                return "Reminder Due: " + dueReminders[0].label;
+                return "Reminder Due: " + dueReminders[0].GetLabel();
             }
             return "Multiple Reminders Due";
         }
@@ -30,14 +30,14 @@ namespace Riminder
             
             if (dueReminders.Count == 1)
             {
-                Reminder reminder = dueReminders[0];
-                return $"Reminder: {reminder.label}\n\n{reminder.description}";
+                BaseReminder reminder = dueReminders[0];
+                return $"Reminder: {reminder.GetLabel()}\n\n{reminder.GetDescription()}";
             }
             
             string result = "Multiple reminders are due:\n";
-            foreach (Reminder reminder in dueReminders)
+            foreach (BaseReminder reminder in dueReminders)
             {
-                result += $"\n- {reminder.label}";
+                result += $"\n- {reminder.GetLabel()}";
             }
             return result;
         }
@@ -47,14 +47,35 @@ namespace Riminder
             if (!ModsConfig.IsActive("User.Riminder")) return false;
             
             dueReminders.Clear();
-            List<Reminder> activeReminders = RiminderManager.GetActiveReminders();
+            List<BaseReminder> activeReminders = RiminderManager.GetActiveReminders();
             
             int currentTick = Find.TickManager.TicksGame;
+            
+            
             dueReminders = activeReminders
                 .Where(r => !r.dismissed && !r.completed && r.triggerTick <= currentTick)
+                .Where(r => ShouldShowAlert(r))
                 .ToList();
             
             return dueReminders.Count > 0;
         }
+        
+        private bool ShouldShowAlert(BaseReminder reminder)
+        {
+            
+            if (!RiminderMod.Settings.showNotifications)
+                return false;
+                
+            
+            bool isTendReminder = reminder is TendReminder || 
+                                 reminder.GetLabel().StartsWith("Tend ") || 
+                                 reminder.frequency == ReminderFrequency.WhenTendingRequired;
+                                 
+            
+            if (isTendReminder)
+                return RiminderMod.Settings.enableTendAlerts;
+            else
+                return RiminderMod.Settings.enableNormalAlerts;
+        }
     }
-} 
+}
