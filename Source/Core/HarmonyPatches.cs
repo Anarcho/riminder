@@ -131,9 +131,12 @@ namespace Riminder
         [HarmonyPatch(typeof(HediffComp_TendDuration), "CompPostTick")]
         public static class HediffComp_TendDuration_CompPostTick_Patch
         {
-            
+            // Cache for pawns with active tend reminders
+            private static HashSet<string> pawnsWithReminders = new HashSet<string>();
             private static Dictionary<string, int> lastUpdateTicks = new Dictionary<string, int>();
-            private static readonly int MIN_UPDATE_INTERVAL = 30; 
+            private static readonly int MIN_UPDATE_INTERVAL = 30;
+            private static int lastCacheRefresh = 0;
+            private static readonly int CACHE_REFRESH_INTERVAL = 300; // Refresh cache every 5 seconds
 
             public static void Postfix(HediffComp_TendDuration __instance)
             {
@@ -143,99 +146,63 @@ namespace Riminder
                     if (__instance.parent == null) return;
 
                     string pawnId = __instance.Pawn.ThingID;
-
-                    
                     int currentTick = Find.TickManager.TicksGame;
+
+                    // Refresh cache periodically
+                    if (currentTick - lastCacheRefresh > CACHE_REFRESH_INTERVAL)
+                    {
+                        RefreshPawnCache();
+                        lastCacheRefresh = currentTick;
+                    }
+
+                    if (!pawnsWithReminders.Contains(pawnId)) return;
+
                     if (lastUpdateTicks.TryGetValue(pawnId, out int lastUpdate))
                     {
                         if (currentTick - lastUpdate < MIN_UPDATE_INTERVAL)
                         {
-                            return; 
+                            return;
                         }
                     }
 
-                    var tendReminders = RiminderManager.GetActiveReminders()
-                        ?.OfType<TendReminder>()
-                        ?.Where(r => r?.FindPawn()?.ThingID == pawnId)
-                        ?.ToList();
-
-                    if (tendReminders == null || !tendReminders.Any()) return;
-
-                    
-                    bool isDisease = __instance.parent?.def?.HasComp(typeof(HediffComp_Immunizable)) == true
-                        || __instance.parent is HediffWithComps hwc && hwc.TryGetComp<HediffComp_Immunizable>() != null;
-
-                    bool isChronic = __instance.parent?.def?.chronic ?? false;
-                    bool isUrgent = __instance.tendTicksLeft <= GenDate.TicksPerHour || !__instance.IsTended;
-                    
-                    
                     float tendPriority = __instance.parent?.TendPriority ?? 0f;
-                    
+                    bool isChronic = __instance.parent?.def?.chronic ?? false;
                     
                     int checkInterval;
                     if (tendPriority >= 1.0f)
-                        checkInterval = 30; 
+                        checkInterval = 30;
                     else if (tendPriority >= 0.5f)
-                        checkInterval = 60; 
+                        checkInterval = 60;
                     else if (tendPriority >= 0.1f)
-                        checkInterval = 120; 
+                        checkInterval = 120;
                     else if (isChronic)
-                        checkInterval = 240; 
+                        checkInterval = 240;
                     else
-                        checkInterval = 180; 
+                        checkInterval = 180;
 
-                    if (Find.TickManager.TicksGame % checkInterval == 0)
+                    if (currentTick % checkInterval != 0) return;
+
+                    var tendReminders = GetCachedTendRemindersForPawn(pawnId);
+                    if (tendReminders == null || !tendReminders.Any()) 
                     {
-                        foreach (var reminder in tendReminders)
-                        {
-                            try
-                            {
-                                
-                                if (__instance.IsTended)
-                                {
-                                    
-                                    if (reminder.totalTendDuration <= 0)
-                                    {
-                                        
-                                        reminder.totalTendDuration = GenDate.TicksPerDay;
-                                    }
-                                    
-                                    
-                                    reminder.tendProgress = TendReminderDataProvider.CalculateHediffProgress(__instance.parent, __instance);
-                                    
-                                    
-                                    reminder.actualTendTicksLeft = __instance.tendTicksLeft;
-                                    
-                                    
-                                    lastUpdateTicks[pawnId] = currentTick;
-                                    
-                                    
-                                    reminder?.Trigger();
-                                    
-                                    
-                                    reminder.ForceProgressUpdate();
-                                }
-                                else if (reminder.totalTendDuration <= 0 && __instance.tendTicksLeft > 0)
-                                {
-                                    reminder.totalTendDuration = __instance.tendTicksLeft;
-                                }
+                        // Remove from cache if no reminders found
+                        pawnsWithReminders.Remove(pawnId);
+                        return;
+                    }
 
-                                if (reminder.actualTendTicksLeft == -1 ||
-                                    (__instance.tendTicksLeft > 0 && __instance.tendTicksLeft < reminder.actualTendTicksLeft))
-                                {
-                                    reminder.actualTendTicksLeft = __instance.tendTicksLeft;
-                                    
-                                    lastUpdateTicks[pawnId] = currentTick;
-                                    
-                                    reminder?.Trigger();
-                                }
-                            }
-                            catch (Exception ex)
+                    lastUpdateTicks[pawnId] = currentTick;
+
+                    foreach (var reminder in tendReminders)
+                    {
+                        try
+                        {
+                            UpdateReminderFromHediffComp(reminder, __instance);
+                        }
+                        catch (Exception ex)
+                        {
+                            if (Prefs.DevMode)
                             {
-                                if (Prefs.DevMode)
-                                {
-                                    Log.Error($"[Riminder] Error triggering reminder: {ex}");
-                                }
+                                Log.Error($"[Riminder] Error updating reminder: {ex}");
                             }
                         }
                     }
@@ -247,6 +214,83 @@ namespace Riminder
                         Log.Error($"[Riminder] Error in tend comp post tick patch: {ex_main}");
                     }
                 }
+            }
+
+            private static void RefreshPawnCache()
+            {
+                pawnsWithReminders.Clear();
+                try
+                {
+                    var allTendReminders = RiminderManager.GetActiveTendReminders();
+                    foreach (var reminder in allTendReminders)
+                    {
+                        if (reminder is TendReminder tr)
+                        {
+                            var pawn = tr.FindPawn();
+                            if (pawn != null)
+                            {
+                                pawnsWithReminders.Add(pawn.ThingID);
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    if (Prefs.DevMode)
+                    {
+                        Log.Error($"[Riminder] Error refreshing pawn cache: {ex}");
+                    }
+                }
+            }
+
+            private static List<TendReminder> GetCachedTendRemindersForPawn(string pawnId)
+            {
+                try
+                {
+                    return RiminderManager.GetActiveTendReminders()
+                        ?.OfType<TendReminder>()
+                        ?.Where(r => r?.FindPawn()?.ThingID == pawnId)
+                        ?.ToList();
+                }
+                catch (Exception)
+                {
+                    return null;
+                }
+            }
+
+            private static void UpdateReminderFromHediffComp(TendReminder reminder, HediffComp_TendDuration hediffComp)
+            {
+                if (hediffComp.IsTended)
+                {
+                    if (reminder.totalTendDuration <= 0)
+                    {
+                        reminder.totalTendDuration = GenDate.TicksPerDay;
+                    }
+                    
+                    reminder.tendProgress = TendReminderDataProvider.CalculateHediffProgress(hediffComp.parent, hediffComp);
+                    
+                    reminder.actualTendTicksLeft = hediffComp.tendTicksLeft;
+                    
+                    reminder?.Trigger();
+                    reminder.ForceProgressUpdate();
+                }
+                else if (reminder.totalTendDuration <= 0 && hediffComp.tendTicksLeft > 0)
+                {
+                    reminder.totalTendDuration = hediffComp.tendTicksLeft;
+                }
+
+                if (reminder.actualTendTicksLeft == -1 ||
+                    (hediffComp.tendTicksLeft > 0 && hediffComp.tendTicksLeft < reminder.actualTendTicksLeft))
+                {
+                    reminder.actualTendTicksLeft = hediffComp.tendTicksLeft;
+                    reminder?.Trigger();
+                }
+            }
+
+            public static void InvalidateCache()
+            {
+                pawnsWithReminders.Clear();
+                lastCacheRefresh = 0;
             }
         }
 
@@ -454,11 +498,8 @@ namespace Riminder
 
                     if (!isDiseaseHediff && IsProcessed(hediffKey)) return;
 
-                    bool hasExistingReminder = RiminderManager.GetActiveTendReminders()
-                        .Any(r => r is TendReminder tendReminder && 
-                                 tendReminder.FindPawn() == pawn);
-                    
-                    if (!hasExistingReminder)
+                    // Use the more efficient method to check for existing reminders
+                    if (!RiminderManager.HasTendReminderForPawn(pawn))
                     {
                         var reminder = ReminderFactory.CreateTendReminder(
                             pawn,
