@@ -11,11 +11,13 @@ namespace Riminder
     {
         private static RiminderManager instance;
         private List<BaseReminder> reminders;
+        private bool needsDuplicateRemoval = false;
 
         public RiminderManager(Game game) : base()
         {
             instance = this;
             reminders = new List<BaseReminder>();
+            needsDuplicateRemoval = false;
         }
 
         public static void Initialize()
@@ -40,15 +42,33 @@ namespace Riminder
 
         private void RemoveDuplicateTendReminders()
         {
+            if (!needsDuplicateRemoval) return;
+            
             var tendReminders = reminders.OfType<TendReminder>().ToList();
+            if (tendReminders.Count <= 1)
+            {
+                needsDuplicateRemoval = false;
+                return;
+            }
+            
             var grouped = tendReminders.GroupBy(tr => tr.FindPawn()).Where(g => g.Key != null);
+            bool removedAny = false;
+            
             foreach (var group in grouped)
             {
+                if (group.Count() <= 1) continue;
+                
                 var toKeep = group.OrderByDescending(tr => (tr.dataProvider as TendReminderDataProvider)?.trackedHediffIds?.Count ?? 0).First();
                 foreach (var duplicate in group.Where(tr => tr != toKeep))
                 {
                     reminders.Remove(duplicate);
+                    removedAny = true;
                 }
+            }
+            
+            if (removedAny)
+            {
+                needsDuplicateRemoval = false;
             }
         }
 
@@ -64,9 +84,13 @@ namespace Riminder
                     return;
                 }
 
-                RemoveDuplicateTendReminders();
-
                 int currentTick = Find.TickManager.TicksGame;
+
+                // Only check for duplicates occasionally and when flagged
+                if (needsDuplicateRemoval && currentTick % 300 == 0)
+                {
+                    RemoveDuplicateTendReminders();
+                }
 
                 if (currentTick % 300 != 0) return;
 
@@ -157,6 +181,14 @@ namespace Riminder
 
                 instance.reminders.Add(reminder);
 
+                // Flag for duplicate removal if this is a TendReminder
+                if (reminder is TendReminder)
+                {
+                    instance.needsDuplicateRemoval = true;
+                    // Invalidate harmony patch cache
+                    InvalidateHarmonyCache();
+                }
+
                 try
                 {
                     var openDialogs = Find.WindowStack?.Windows?.OfType<Dialog_ViewReminders>().ToList();
@@ -176,6 +208,23 @@ namespace Riminder
             catch (Exception ex)
             {
                 Log.Error($"[Riminder] Error adding reminder: {ex}");
+            }
+        }
+
+        private static void InvalidateHarmonyCache()
+        {
+            try
+            {
+                // Call the Harmony patch's cache invalidation method
+                HarmonyPatches.HediffComp_TendDuration_CompPostTick_Patch.InvalidateCache();
+                HarmonyPatches.Pawn_HealthTracker_HealthTick_Patch.InvalidateCache();
+            }
+            catch (Exception ex)
+            {
+                if (Prefs.DevMode)
+                {
+                    Log.Error($"[Riminder] Error invalidating harmony cache: {ex}");
+                }
             }
         }
 
@@ -250,7 +299,16 @@ namespace Riminder
                 if (instance.reminders == null) return;
                 if (string.IsNullOrEmpty(id)) return;
 
+                // Check if we're removing a TendReminder
+                bool removedTendReminder = instance.reminders.Any(r => r != null && r.id == id && r is TendReminder);
+                
                 instance.reminders.RemoveAll(r => r != null && r.id == id);
+
+                // Invalidate cache if we removed a TendReminder
+                if (removedTendReminder)
+                {
+                    InvalidateHarmonyCache();
+                }
 
                 try
                 {
@@ -277,9 +335,16 @@ namespace Riminder
         public static void RemoveReminderForPawn(string pawnId)
         {
             if (instance?.reminders == null) return;
-            instance.reminders.RemoveAll(r =>
+            
+            bool removedAny = instance.reminders.RemoveAll(r =>
                 r is TendReminder tr &&
-                (tr.FindPawn()?.ThingID == pawnId));
+                (tr.FindPawn()?.ThingID == pawnId)) > 0;
+                
+            // Invalidate cache if we removed any TendReminders
+            if (removedAny)
+            {
+                InvalidateHarmonyCache();
+            }
         }
 
         public override void ExposeData()
@@ -288,10 +353,12 @@ namespace Riminder
             {
                 base.ExposeData();
                 Scribe_Collections.Look(ref reminders, "reminders", LookMode.Deep);
+                Scribe_Values.Look(ref needsDuplicateRemoval, "needsDuplicateRemoval", false);
 
                 if (Scribe.mode == LoadSaveMode.LoadingVars && reminders == null)
                 {
                     reminders = new List<BaseReminder>();
+                    needsDuplicateRemoval = false;
                 }
 
                 if (Scribe.mode == LoadSaveMode.PostLoadInit)
@@ -309,11 +376,15 @@ namespace Riminder
                                 reminders.RemoveAt(i);
                             }
                         }
+                        
+                        // Check if we have any TendReminders that might need deduplication
+                        needsDuplicateRemoval = reminders.OfType<TendReminder>().Count() > 1;
                         RemoveDuplicateTendReminders();
                     }
                     else
                     {
                         reminders = new List<BaseReminder>();
+                        needsDuplicateRemoval = false;
                     }
                 }
             }
@@ -390,6 +461,23 @@ namespace Riminder
                     Log.Error($"[Riminder] Error updating tend reminders for pawn {pawn.LabelShort}: {ex}");
                 }
             }
+        }
+
+        public static void ForceDuplicateRemoval()
+        {
+            if (instance != null)
+            {
+                instance.needsDuplicateRemoval = true;
+                instance.RemoveDuplicateTendReminders();
+            }
+        }
+        
+        public static bool HasTendReminderForPawn(Pawn pawn)
+        {
+            if (pawn == null || instance == null || instance.reminders == null) return false;
+            
+            return instance.reminders.OfType<TendReminder>()
+                .Any(tr => tr.FindPawn() == pawn && !tr.completed && !tr.dismissed);
         }
     }
 }
